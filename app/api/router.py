@@ -1,13 +1,13 @@
 from fastapi import FastAPI, HTTPException, Depends
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, relationship
 from pydantic import BaseModel
 from datetime import datetime
 import bcrypt
 
 from fastapi import APIRouter
-from typing import List
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -16,6 +16,7 @@ SQLALCHEMY_DATABASE_URL = "mysql+mysqlconnector://root:mysql@localhost:3306/log_
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
 
 # SAMPLE_SERVICES data
 SAMPLE_SERVICES = [
@@ -155,6 +156,8 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Optional: Add relationship to tasks
+    tasks = relationship("Task", back_populates="user")
 
 class Service(Base):
     __tablename__ = "services"
@@ -162,11 +165,28 @@ class Service(Base):
     Service_Offerings_Major = Column(String(255), nullable=False)
     Service_Level = Column(String(50), nullable=False)
     Service_Type = Column(String(100), nullable=False)
+    # Optional: Add relationship to tasks
+    tasks = relationship("Task", back_populates="service")
+
+# New Task Model
+class Task(Base):
+    __tablename__ = "tasks"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(String(500), nullable=True)
+    service_id = Column(Integer, ForeignKey('services.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    status = Column(String(50), default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    service = relationship("Service", back_populates="tasks")
+    user = relationship("User", back_populates="tasks")
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
 
-# Pydantic Models for request/response
+# Pydantic Models
 class UserRegister(BaseModel):
     name: str
     email: str
@@ -195,6 +215,26 @@ class ServiceResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# Task Pydantic Models
+class TaskCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    service_id: int
+    user_id: int
+    status: Optional[str] = "pending"
+
+class TaskResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    service_id: int
+    user_id: int
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 # Database dependency
 def get_db():
     db = SessionLocal()
@@ -203,7 +243,7 @@ def get_db():
     finally:
         db.close()
 
-# Helper functions
+# Helper functions remain the same as in your original code...
 def hash_password(password: str) -> str:
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
@@ -313,3 +353,166 @@ async def get_services_by_level(service_level: str, db: Session = Depends(get_db
     if not services:
         raise HTTPException(status_code=404, detail="No services found for this level")
     return services
+
+### TASKS
+
+
+@router.post("/tasks", response_model=TaskResponse)
+async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
+    # Validate that user exists
+    user = db.query(User).filter(User.id == task.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Validate that service exists
+    service = db.query(Service).filter(Service.id == task.service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+    
+    # Create new task
+    db_task = Task(
+        name=task.name,
+        description=task.description,
+        service_id=task.service_id,
+        user_id=task.user_id,
+        status=task.status or "pending"
+    )
+    
+    try:
+        db.add(db_task)
+        db.commit()
+        db.refresh(db_task)
+        return db_task
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@router.post("/tasks/bulk", response_model=List[TaskResponse])
+async def create_bulk_tasks(tasks: List[TaskCreate], db: Session = Depends(get_db)):
+    # Validate all tasks before inserting
+    user_ids = set(task.user_id for task in tasks)
+    service_ids = set(task.service_id for task in tasks)
+    
+    # Check users exist
+    existing_users = db.query(User.id).filter(User.id.in_(user_ids)).all()
+    if len(existing_users) != len(user_ids):
+        raise HTTPException(status_code=404, detail="One or more users not found")
+    
+    # Check services exist
+    existing_services = db.query(Service.id).filter(Service.id.in_(service_ids)).all()
+    if len(existing_services) != len(service_ids):
+        raise HTTPException(status_code=404, detail="One or more services not found")
+    
+    # Create task objects
+    db_tasks = [
+        Task(
+            name=task.name,
+            description=task.description,
+            service_id=task.service_id,
+            user_id=task.user_id,
+            status=task.status or "pending"
+        ) for task in tasks
+    ]
+    
+    try:
+        db.add_all(db_tasks)
+        db.commit()
+        
+        # Refresh to get IDs
+        for task in db_tasks:
+            db.refresh(task)
+        
+        return db_tasks
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@router.get("/tasks/user/{user_id}", response_model=List[TaskResponse])
+async def get_user_tasks(user_id: int, db: Session = Depends(get_db)):
+    # Validate user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get all tasks for the user
+    tasks = db.query(Task).filter(Task.user_id == user_id).all()
+    return tasks
+
+@router.get("/tasks/service/{service_id}", response_model=List[TaskResponse])
+async def get_service_tasks(service_id: int, db: Session = Depends(get_db)):
+    # Validate service exists
+    service = db.query(Service).filter(Service.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+    
+    # Get all tasks for the service
+    tasks = db.query(Task).filter(Task.service_id == service_id).all()
+    return tasks
+
+@router.get("/tasks/{user_id}/{service_id}", response_model=List[TaskResponse])
+async def get_user_service_tasks(user_id: int, service_id: int, db: Session = Depends(get_db)):
+    # Validate user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Validate service exists
+    service = db.query(Service).filter(Service.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+    
+    # Get tasks for the specific user and service
+    tasks = db.query(Task).filter(
+        Task.user_id == user_id, 
+        Task.service_id == service_id
+    ).all()
+    
+    return tasks
+
+@router.put("/tasks/{task_id}", response_model=TaskResponse)
+async def update_task(task_id: int, task_update: TaskCreate, db: Session = Depends(get_db)):
+    # Find existing task
+    db_task = db.query(Task).filter(Task.id == task_id).first()
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Validate user and service if provided
+    if task_update.user_id:
+        user = db.query(User).filter(User.id == task_update.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+    
+    if task_update.service_id:
+        service = db.query(Service).filter(Service.id == task_update.service_id).first()
+        if not service:
+            raise HTTPException(status_code=404, detail="Service not found")
+    
+    # Update task fields
+    db_task.name = task_update.name or db_task.name
+    db_task.description = task_update.description or db_task.description
+    db_task.service_id = task_update.service_id or db_task.service_id
+    db_task.user_id = task_update.user_id or db_task.user_id
+    db_task.status = task_update.status or db_task.status
+    
+    try:
+        db.commit()
+        db.refresh(db_task)
+        return db_task
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@router.delete("/tasks/{task_id}")
+async def delete_task(task_id: int, db: Session = Depends(get_db)):
+    # Find existing task
+    db_task = db.query(Task).filter(Task.id == task_id).first()
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    try:
+        db.delete(db_task)
+        db.commit()
+        return {"detail": "Task deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
