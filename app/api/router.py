@@ -19,132 +19,133 @@ Base = declarative_base()
 
 # SAMPLE_SERVICES data
 SAMPLE_SERVICES = [
-     {
-      "Service_Offerings_Major": "Alert & Monitoring Job",
-      "Service_Level": "Level 1",
-      "Service_Type": "Monitoring"
+    {
+        "Service_Offerings_Major": "Alert & Monitoring Job",
+        "Service_Type": "Monitoring",
+        "Service_Level": "Level 1"
     },
     {
-      "Service_Offerings_Major": "Application and Batch Job Monitoring",
-      "Service_Level": "Level 1",
-      "Service_Type": "Monitoring"
+        "Service_Offerings_Major": "Application and Batch Job Monitoring",
+        "Service_Type": "Monitoring",
+        "Service_Level": "Level 1"
     },
     {
-      "Service_Offerings_Major": "Application & Batch Job Daily Health Check",
-      "Service_Level": "Level 1",
-      "Service_Type": "Monitoring"
+        "Service_Offerings_Major": "Application & Batch Job Daily Health Check",
+        "Service_Type": "Monitoring",
+        "Service_Level": "Level 1"
     },
     {
-      "Service_Offerings_Major": "Monitoring Communications & Reporting",
-      "Service_Level": "Level 1",
-      "Service_Type": "Governance"
+        "Service_Offerings_Major": "Monitoring Communications & Reporting",
+        "Service_Type": "Governance",
+        "Service_Level": "Level 1"
     },
     {
-      "Service_Offerings_Major": "Functional & Hierarchical Escalation",
-      "Service_Level": "Level 1",
-      "Service_Type": "Governance"
+        "Service_Offerings_Major": "Functional & Hierarchical Escalation",
+        "Service_Type": "Governance",
+        "Service_Level": "Level 1"
     },
     {
-      "Service_Offerings_Major": "Access/Privilege Issues",
-      "Service_Level": "Level 1",
-      "Service_Type": "User Support"
+        "Service_Offerings_Major": "Access/Privilege Issues",
+        "Service_Type": "User Support",
+        "Service_Level": "Level 1"
     },
     {
-      "Service_Offerings_Major": "Helpdesk, administration and Super Users",
-      "Service_Level": "Level 1",
-      "Service_Type": "User Support"
+        "Service_Offerings_Major": "Helpdesk, administration and Super Users",
+        "Service_Type": "User Support",
+        "Service_Level": "Level 1"
     },
     {
-      "Service_Offerings_Major": "Data Issues analysis & fix",
-      "Service_Level": "Level 2",
-      "Service_Type": "Production Support"
+        "Service_Offerings_Major": "Data Issues analysis & fix",
+        "Service_Type": "Production Support",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "Break-fix of issues without changing application code",
-      "Service_Level": "Level 2",
-      "Service_Type": "Production Support"
+        "Service_Offerings_Major": "Break-fix of issues without changing application code",
+        "Service_Type": "Production Support",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "Triage of Issues/tickets",
-      "Service_Level": "Level 2",
-      "Service_Type": "Production Support"
+        "Service_Offerings_Major": "Triage of Issues/tickets",
+        "Service_Type": "Production Support",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "Issues analysis and hot fix (no code change)",
-      "Service_Level": "Level 2",
-      "Service_Type": "Production Support"
+        "Service_Offerings_Major": "Issues analysis and hot fix (no code change)",
+        "Service_Type": "Production Support",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "Application Configuration",
-      "Service_Level": "Level 2",
-      "Service_Type": "Production Support"
+        "Service_Offerings_Major": "Application Configuration",
+        "Service_Type": "Production Support",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "Ad-hoc reports (Queries)",
-      "Service_Level": "Level 2",
-      "Service_Type": "User Support"
+        "Service_Offerings_Major": "Ad-hoc reports (Queries)",
+        "Service_Type": "User Support",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "Upgrades, Patches, & configuration management",
-      "Service_Level": "Level 2",
-      "Service_Type": "Operation Support"
+        "Service_Offerings_Major": "Upgrades, Patches, & configuration management",
+        "Service_Type": "Operation Support",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "DB Maintenance, Archiving and Housekeeping",
-      "Service_Level": "Level 2",
-      "Service_Type": "Maintenance"
+        "Service_Offerings_Major": "DB Maintenance, Archiving and Housekeeping",
+        "Service_Type": "Maintenance",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "Application Level Housekeeping activities",
-      "Service_Level": "Level 2",
-      "Service_Type": "Maintenance"
+        "Service_Offerings_Major": "Application Level Housekeeping activities",
+        "Service_Type": "Maintenance",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "Maintenance of workflows",
-      "Service_Level": "Level 2",
-      "Service_Type": "Maintenance"
+        "Service_Offerings_Major": "Maintenance of workflows",
+        "Service_Type": "Maintenance",
+        "Service_Level": "Level 2"
     },
     {
-      "Service_Offerings_Major": "Incident Management",
-      "Service_Level": "Level 3",
-      "Service_Type": "Incident"
+        "Service_Offerings_Major": "Incident Management",
+        "Service_Type": "Incident",
+        "Service_Level": "Level 3"
     },
     {
-      "Service_Offerings_Major": "Problem Management",
-      "Service_Level": "Level 3",
-      "Service_Type": "Maintenance"
+        "Service_Offerings_Major": "Problem Management",
+        "Service_Type": "Maintenance",
+        "Service_Level": "Level 3"
     },
     {
-      "Service_Offerings_Major": "Change & Release Management",
-      "Service_Level": "Level 3",
-      "Service_Type": "Maintenance"
+        "Service_Offerings_Major": "Change & Release Management",
+        "Service_Type": "Maintenance",
+        "Service_Level": "Level 3"
     },
     {
-      "Service_Offerings_Major": "Configuration Management",
-      "Service_Level": "Level 3",
-      "Service_Type": "Maintenance"
+        "Service_Offerings_Major": "Configuration Management",
+        "Service_Type": "Maintenance",
+        "Service_Level": "Level 3"
     },
     {
-      "Service_Offerings_Major": "Service Request",
-      "Service_Level": "Level 3",
-      "Service_Type": "Service Request"
+        "Service_Offerings_Major": "Service Request",
+        "Service_Type": "Service Request",
+        "Service_Level": "Level 3"
     },
     {
-      "Service_Offerings_Major": "Minor Enhancement less than 40 hours",
-      "Service_Level": "Level 3",
-      "Service_Type": "Enhancement"
+        "Service_Offerings_Major": "Minor Enhancement less than 40 hours",
+        "Service_Type": "Enhancement",
+        "Service_Level": "Level 3"
     },
     {
-      "Service_Offerings_Major": "Major Enhancement range from 40 to 100 hours",
-      "Service_Level": "Level 3",
-      "Service_Type": "Enhancement"
+        "Service_Offerings_Major": "Major Enhancement range from 40 to 100 hours",
+        "Service_Type": "Enhancement",
+        "Service_Level": "Level 3"
     },
     {
-      "Service_Offerings_Major": "Service Improvement",
-      "Service_Level": "Level 3",
-      "Service_Type": "Service Improvement"
+        "Service_Offerings_Major": "Service Improvement",
+        "Service_Type": "Service Improvement",
+        "Service_Level": "Level 3"
     }
 ]
+
 
 # Database Models
 class User(Base):
