@@ -4,10 +4,16 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from pydantic import BaseModel
 from datetime import datetime
+from fastapi.responses import JSONResponse
 import bcrypt
 
 from fastapi import APIRouter
 from typing import List, Optional
+
+from app.services.service_analysis import analyze_service_tasks
+
+from app.services.openai_call import azure_openai_call
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -516,3 +522,41 @@ async def delete_task(task_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@router.get("/service-analysis/{user_id}/{service_id}")
+async def get_service_analysis(
+    user_id: int,
+    service_id: int, 
+    db: Session = Depends(get_db)
+):
+    analysis = analyze_service_tasks(db, user_id, service_id)
+
+    messages = [
+    {
+        "role": "user",
+        "content": (
+            f"Convert the JSON file into a paragraph, and return it. Dont add additional content. Dont add unwanted symbols and slashes in the paragraph, return as simple paragraph."
+        ),
+    },
+    {
+        "role": "assistant", 
+        "content": str(analysis)
+    }
+    ]
+
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": settings.AZURE_OPENAI_API_KEY,
+    }
+
+    try:
+        # Pass the messages list to the function
+        summary = await azure_openai_call(messages, headers)
+
+        return summary
+
+        # return JSONResponse(
+        #     content={"Analysis": analysis, "Summary": summary}
+        # )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
