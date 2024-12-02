@@ -451,14 +451,6 @@ class TaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class TimelineResponse(BaseModel):
-    Service_Type: str
-    Event_Type: str
-    Timeline: Optional[str]
-
-    class Config:
-        from_attributes = True
-
 # Database dependency
 def get_db():
     db = SessionLocal()
@@ -795,7 +787,7 @@ async def get_service_analysis(
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/timeline/{service_type}/{event_type}", response_model=TimelineResponse)
+@router.get("/timeline/{service_type}/{event_type}")
 async def return_timeline(
     service_type: str, 
     event_type: str, 
@@ -810,6 +802,6 @@ async def return_timeline(
     if not timeline:
         raise HTTPException(status_code=404, detail="Timeline not found")
     
-    return timeline
+    return timeline.Timeline
 
 
