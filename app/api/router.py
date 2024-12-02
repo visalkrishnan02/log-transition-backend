@@ -6,12 +6,13 @@ from pydantic import BaseModel
 from datetime import datetime
 from fastapi.responses import JSONResponse
 import bcrypt
+import asyncio
 
 from fastapi import APIRouter
 from typing import List, Optional
 
 from app.services.service_analysis import analyze_service_tasks
-
+from app.services.timeline_generation import timeline_generation
 from app.services.openai_call import azure_openai_call
 from app.core.config import settings
 
@@ -153,8 +154,217 @@ SAMPLE_SERVICES = [
     }
 ]
 
+TEMPLATE_TIMELINE_DATA = [
+    {
+        "Service_Type": "Monitoring",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Monitoring",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Monitoring",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Monitoring",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Governance",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Governance",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Governance",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Governance",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "User Support",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "User Support",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "User Support",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "User Support",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Production Support",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Production Support",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Production Support",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Production Support",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Operation Support",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Operation Support",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Operation Support",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Operation Support",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Maintenance",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Maintenance",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Maintenance",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Maintenance",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Incident",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Incident",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Incident",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Incident",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Service Request",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Service Request",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Service Request",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Service Request",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Enhancement",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Enhancement",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Enhancement",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Enhancement",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Service Improvement",
+        "Event_Type": "KT Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Service Improvement",
+        "Event_Type": "Fwd Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Service Improvement",
+        "Event_Type": "Rev Session",
+        "Timeline": ""
+    },
+    {
+        "Service_Type": "Service Improvement",
+        "Event_Type": "Cutover",
+        "Timeline": ""
+    }
+]
 
 # Database Models
+class Timeline(Base):
+    __tablename__ = "timelines"
+    id = Column(Integer, primary_key=True, index=True)
+    Service_Type = Column(String(100), nullable=False)
+    Event_Type = Column(String(100), nullable=False)
+    Timeline = Column(String(50), nullable=True)
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -241,6 +451,14 @@ class TaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class TimelineResponse(BaseModel):
+    Service_Type: str
+    Event_Type: str
+    Timeline: Optional[str]
+
+    class Config:
+        from_attributes = True
+
 # Database dependency
 def get_db():
     db = SessionLocal()
@@ -261,24 +479,40 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         hashed_password.encode('utf-8')
     )
 
-# Function to initialize services
-def init_services(db: Session):
+async def init_services_and_timelines(db: Session):
     # Check if services already exist
     existing_services = db.query(Service).first()
-    if existing_services:
-        return
-    
-    # Add services from the SAMPLE_SERVICES list
-    services_to_add = [
-        Service(
-            Service_Offerings_Major=service['Service_Offerings_Major'],
-            Service_Level=service['Service_Level'],
-            Service_Type=service['Service_Type']
-        ) for service in SAMPLE_SERVICES
-    ]
-    
-    db.add_all(services_to_add)
-    db.commit()
+    if not existing_services:
+        # Add services from the SAMPLE_SERVICES list
+        services_to_add = [
+            Service(
+                Service_Offerings_Major=service['Service_Offerings_Major'],
+                Service_Level=service['Service_Level'],
+                Service_Type=service['Service_Type']
+            ) for service in SAMPLE_SERVICES
+        ]
+        
+        db.add_all(services_to_add)
+        db.commit()
+
+    # Check if timelines already exist
+    existing_timelines = db.query(Timeline).first()
+    if not existing_timelines:
+        # Generate timeline data
+        TIMELINE_DATA = await timeline_generation(TEMPLATE_TIMELINE_DATA)
+        
+        # Add timelines from the generated data
+        timelines_to_add = [
+            Timeline(
+                Service_Type=timeline['Service_Type'],
+                Event_Type=timeline['Event_Type'],
+                Timeline=timeline['Timeline']
+            ) for timeline in TIMELINE_DATA
+        ]
+        
+        db.add_all(timelines_to_add)
+        db.commit()
+
 
 # Startup event to initialize services
 @router.on_event("startup")
@@ -286,7 +520,7 @@ async def startup():
     # Get a database session
     db = SessionLocal()
     try:
-        init_services(db)
+        await init_services_and_timelines(db)
     finally:
         db.close()
 
@@ -560,3 +794,22 @@ async def get_service_analysis(
         # )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/timeline/{service_type}/{event_type}", response_model=TimelineResponse)
+async def return_timeline(
+    service_type: str, 
+    event_type: str, 
+    db: Session = Depends(get_db)
+):
+    # Find the timeline for the specific service type and event type
+    timeline = db.query(Timeline).filter(
+        Timeline.Service_Type == service_type,
+        Timeline.Event_Type == event_type
+    ).first()
+    
+    if not timeline:
+        raise HTTPException(status_code=404, detail="Timeline not found")
+    
+    return timeline
+
+

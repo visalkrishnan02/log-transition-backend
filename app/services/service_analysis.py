@@ -4,9 +4,7 @@ from logging.handlers import RotatingFileHandler
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException
 
-
 from app.core.config import settings
-from app.services.openai_call import azure_openai_call
 
 # Logging setup
 log_formatter = logging.Formatter(
