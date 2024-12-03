@@ -787,21 +787,67 @@ async def get_service_analysis(
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/timeline/{service_type}/{event_type}")
-async def return_timeline(
-    service_type: str, 
-    event_type: str, 
-    db: Session = Depends(get_db)
-):
-    # Find the timeline for the specific service type and event type
-    timeline = db.query(Timeline).filter(
-        Timeline.Service_Type == service_type,
-        Timeline.Event_Type == event_type
-    ).first()
+# @router.get("/timeline/{service_type}/{event_type}")
+# async def return_timeline(
+#     service_type: str, 
+#     event_type: str, 
+#     db: Session = Depends(get_db)
+# ):
+#     # Find the timeline for the specific service type and event type
+#     timeline = db.query(Timeline).filter(
+#         Timeline.Service_Type == service_type,
+#         Timeline.Event_Type == event_type
+#     ).first()
     
-    if not timeline:
-        raise HTTPException(status_code=404, detail="Timeline not found")
+#     if not timeline:
+#         raise HTTPException(status_code=404, detail="Timeline not found")
     
-    return timeline.Timeline
+#     return timeline.Timeline
+
+@router.get("/timeline/{user_id}/{service_id}/{activity}")
+async def return_timeline(user_id: int, service_id: int, activity: str, db: Session = Depends(get_db)):
+    # Validate user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Validate service exists and get service name
+    service = db.query(Service).filter(Service.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    service_name = service.Service_Type
+
+    tasks = db.query(Task).filter(
+        Task.user_id == user_id, 
+        Task.service_id == service_id
+    ).all()
+    
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                f"""Calculate the minimum number of days required to complete the event {activity} for the service {service_name}, 
+                which includes the following tasks: {tasks}. 
+                Return the result strictly in the format: "x". (eg. 5)
+                Do not include quotes, sentences, phrases, or any other characters. Only return the result in the exact format
+                Return a number only. Do not complain in sentences."""
+            ),
+        }
+    ]
+
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": settings.AZURE_OPENAI_API_KEY,
+    }
+
+    try:
+        # Pass the messages list to the function
+        timeline = await azure_openai_call(messages, headers)
+        # return JSONResponse(
+        #     content={"functional_requirements": functional_requirements}
+        # )
+        return timeline
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
