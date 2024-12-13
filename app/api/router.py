@@ -716,14 +716,14 @@ async def delete_service_type(service_type_id: int, db: Session = Depends(get_db
 # Catalog Routes (with user_id)
 ###############################
 
-@router.post("/user/{user_id}/catalog", response_model=CatalogResponse)
-async def create_catalog(user_id: int, catalog: CatalogCreate, db: Session = Depends(get_db)):
+@router.post("/user/catalog", response_model=CatalogResponse)
+async def create_catalog(catalog: CatalogCreate, db: Session = Depends(get_db)):
     # Check if user exists
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == catalog.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    db_catalog = Catalog(**catalog.dict(), user_id=user_id)
+    db_catalog = Catalog(**catalog.dict())
     try:
         db.add(db_catalog)
         db.commit()
@@ -800,10 +800,10 @@ async def delete_catalog(user_id: int, catalog_id: int, db: Session = Depends(ge
 # SubCatalog Routes (with catalog_id)
 #####################################
 
-@router.post("/catalog/{catalog_id}/subcatalog", response_model=SubCatalogResponse)
-async def create_subcatalog(catalog_id: int, subcatalog: SubCatalogCreate, db: Session = Depends(get_db)):
+@router.post("/subcatalog", response_model=SubCatalogResponse)
+async def create_subcatalog(subcatalog: SubCatalogCreate, db: Session = Depends(get_db)):
     # Check if catalog exists
-    catalog = db.query(Catalog).filter(Catalog.id == catalog_id).first()
+    catalog = db.query(Catalog).filter(Catalog.id == subcatalog.catalog_id).first()
     if not catalog:
         raise HTTPException(status_code=404, detail="Catalog not found")
     
@@ -812,7 +812,7 @@ async def create_subcatalog(catalog_id: int, subcatalog: SubCatalogCreate, db: S
     if not service_type:
         raise HTTPException(status_code=404, detail="Service type not found")
     
-    db_subcatalog = SubCatalog(**subcatalog.dict(), catalog_id=catalog_id)
+    db_subcatalog = SubCatalog(**subcatalog.dict())
     try:
         db.add(db_subcatalog)
         db.commit()
@@ -889,14 +889,14 @@ async def delete_subcatalog(catalog_id: int, subcatalog_id: int, db: Session = D
 # Topic Routes (with subcatalog_id)
 ##################################
 
-@router.post("/subcatalog/{subcatalog_id}/topic", response_model=TopicResponse)
-async def create_topic(subcatalog_id: int, topic: TopicCreate, db: Session = Depends(get_db)):
+@router.post("/topic", response_model=TopicResponse)
+async def create_topic(topic: TopicCreate, db: Session = Depends(get_db)):
     # Check if subcatalog exists
-    subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
+    subcatalog = db.query(SubCatalog).filter(SubCatalog.id == topic.subcatalog_id).first()
     if not subcatalog:
         raise HTTPException(status_code=404, detail="Subcatalog not found")
-    
-    db_topic = Topic(**topic.dict(), subcatalog_id=subcatalog_id)
+   
+    db_topic = Topic(**topic.dict())
     try:
         db.add(db_topic)
         db.commit()
