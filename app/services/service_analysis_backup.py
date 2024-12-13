@@ -3,12 +3,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException
-  
+from app.api.router import Task, Service
 
 from app.core.config import settings
-from typing import List
-
-from app.services.openai_call import azure_openai_call
 
 # Logging setup
 log_formatter = logging.Formatter(
@@ -66,7 +63,7 @@ class ServiceAnalysis(dspy.Module):
         self.criticality_predictor = dspy.ChainOfThought(ServiceCriticalitySignature)
         self.effort_predictor = dspy.ChainOfThought(ServiceEffortSignature)
     
-    def forward(self, service_type, tasks):
+    def forward(self, service_name, service_type, tasks):
         try:
             # Convert tasks list to a formatted string description
             tasks_description = self.format_tasks(tasks)
@@ -87,6 +84,7 @@ class ServiceAnalysis(dspy.Module):
             )
             
             return {
+                'service_name': service_name,
                 'complexity': complexity_pred.complexity_assessment,
                 'criticality': criticality_pred.criticality_assessment,
                 'effort': effort_pred.effort_assessment
@@ -102,93 +100,50 @@ class ServiceAnalysis(dspy.Module):
             formatted_tasks.append(f"{task['name']}: {task['description'] or 'No description'}")
         return " | ".join(formatted_tasks)
 
-async def analyze_service(service_type, tasks):
+def analyze_service(service_name, service_type, tasks):
     """Analyze an entire service based on all its tasks."""
-    def format_tasks(tasks):
-        """Format tasks list into a string description."""
-        formatted_tasks = []
-        for task in tasks:
-            formatted_tasks.append(f"{task['name']}: {task['description'] or 'No description'}")
-        return " | ".join(formatted_tasks)
-
-    tasks_formatted = format_tasks(tasks)
     try:
-        # analyzer = ServiceAnalysis()
-        # analysis = analyzer(
-        #     service_type=service_type,
-        #     tasks=tasks
-        # )
-        messages = [
-        {
-            "role": "user",
-            "content": (
-                f"""I have a group of tasks from a particular service type. The tasks are {tasks_formatted} and the service type is {service_type}.
-                I want an analysis report of this tasks revolving the service type. I want the complexity, criticality of the tasks and the effort
-                required to execute the tasks. The complexity and criticality should be strictly mentioned either 'High' or 'Low'."""
-            ),
-        }
-        ]
-
-        headers = {
-            "Content-Type": "application/json",
-            "api-key": settings.AZURE_OPENAI_API_KEY,
-        }
-        analysis = await azure_openai_call(messages, headers)
+        analyzer = ServiceAnalysis()
+        analysis = analyzer(
+            service_name=service_name,
+            service_type=service_type,
+            tasks=tasks
+        )
         return analysis
     except Exception as e:
-        logger.error(f"Failed to analyze service type{service_type}: {str(e)}")
+        logger.error(f"Failed to analyze service {service_name}: {str(e)}")
         raise
 
-async def analyze_service_tasks(db: Session, user_id: int, service_ids: List[int]):
-    """
-    Analyze tasks for multiple services and user from the database
-   
-    Args:
-        db (Session): Database session
-        user_id (int): ID of the user
-        service_ids (List[int]): List of service IDs
-    Returns:
-        dict: Service type analysis results
-    """
+def analyze_service_tasks(db: Session, user_id: int, service_id: int):
+    
     try:
-        from app.api.router import Task, Service, User
-        # Validate user exists
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-       
-        # Validate services exist
-        for service_id in service_ids:
-            service = db.query(Service).filter(Service.id == service_id).first()
-            if not service:
-                raise HTTPException(status_code=404, detail=f"Service with ID {service_id} not found")
-       
-        # Query tasks for the user and specified services
-        tasks_query = db.query(Task, Service).join(Service, Task.service_id == Service.id)\
-            .filter(Task.user_id == user_id, Task.service_id.in_(service_ids))
-       
-        # Group tasks by service type
-        grouped_tasks = {}
-        for task, service in tasks_query:
-            if service.Service_Type not in grouped_tasks:
-                grouped_tasks[service.Service_Type] = []
-           
-            grouped_tasks[service.Service_Type].append({
-                'name': task.name,
+        tasks = db.query(Task).filter(
+            Task.service_id == service_id, 
+            Task.user_id == user_id
+        ).all()
+        
+        # Get service details
+        service = db.query(Service).filter(Service.id == service_id).first()
+        
+        if not service or not tasks:
+            raise HTTPException(status_code=404, detail="No tasks found for this service and user")
+        
+        # Convert tasks to a format compatible with analysis
+        task_list = [
+            {
+                'name': task.name, 
                 'description': task.description
-            })
-       
-        # Perform analysis for each service type
-        service_type_analyses = {}
-        for service_type, tasks in grouped_tasks.items():
-            # Perform service analysis for this service type
-            analysis = await analyze_service(
-                service_type=service_type,
-                tasks=tasks
-            )
-            service_type_analyses[service_type.lower()] = analysis
-       
-        return service_type_analyses
+            } for task in tasks
+        ]
+        
+        # Perform service analysis
+        analysis = analyze_service(
+            service_name=service.Service_Offerings_Major,
+            service_type=service.Service_Type,
+            tasks=task_list
+        )
+
+        return analysis
 
     except Exception as e:
         logger.error(f"Service analysis error: {str(e)}")
