@@ -10,6 +10,7 @@ app = FastAPI()
 def include_router(app):
     app.include_router(
         router,
+        prefix="/api/canvas",
         tags=["User Backend"],
     )
 

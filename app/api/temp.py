@@ -250,9 +250,249 @@ async def init_catalog_and_data(db: Session):
             }
         ]
 
+        catalog_data = [
+            {"catalog_name": "End-user Compute", "is_vertical": True, "user_id": 1},
+            {"catalog_name": "Service Desk", "is_vertical": False, "user_id": 1},
+            {"catalog_name": "Application Support", "is_vertical": True, "user_id": 1},
+            {"catalog_name": "Maintenance Services", "is_vertical": True, "user_id": 1},
+            {"catalog_name": "Security & Compliance", "is_vertical": True, "user_id": 1},
+            {"catalog_name": "Cloud Services", "is_vertical": False, "user_id": 1},
+            {"catalog_name": "Network Operations", "is_vertical": True, "user_id": 1},
+            {"catalog_name": "Database Management", "is_vertical": False, "user_id": 1}
+        ]
+        
+        subcatalog_data = [
+            {
+                "catalog_id": 1,
+                "sub_catalog_name": "Access/Privilege Issues",
+                "service_level": "Level 1",
+                "service_type_id": 8
+            },
+            {
+                "catalog_id": 1,
+                "sub_catalog_name": "Helpdesk, administration and Super Users",
+                "service_level": "Level 1",
+                "service_type_id": 8
+            },
+            {
+                "catalog_id": 1,
+                "sub_catalog_name": "Ad-hoc reports (Queries)",
+                "service_level": "Level 2",
+                "service_type_id": 8
+            },
+            {
+                "catalog_id": 1,
+                "sub_catalog_name": "Device Configuration Assistance",
+                "service_level": "Level 1",
+                "service_type_id": 8
+            },
+            {
+                "catalog_id": 1,
+                "sub_catalog_name": "Peripheral Device Setup & Troubleshooting",
+                "service_level": "Level 1",
+                "service_type_id": 8
+            },
+            {
+                "catalog_id": 2,
+                "sub_catalog_name": "Incident Management",
+                "service_level": "Level 3",
+                "service_type_id": 2
+            },
+            {
+                "catalog_id": 2,
+                "sub_catalog_name": "Service Request",
+                "service_level": "Level 3",
+                "service_type_id": 7
+            },
+            {
+                "catalog_id": 2,
+                "sub_catalog_name": "Functional & Hierarchical Escalation",
+                "service_level": "Level 1",
+                "service_type_id": 1
+            },
+            {
+                "catalog_id": 2,
+                "sub_catalog_name": "Monitoring Communications & Reporting",
+                "service_level": "Level 1",
+                "service_type_id": 1
+            },
+            {
+                "catalog_id": 2,
+                "sub_catalog_name": "First-line Technical Support",
+                "service_level": "Level 1",
+                "service_type_id": 2
+            },
+            {
+                "catalog_id": 3,
+                "sub_catalog_name": "Data Issues analysis & fix",
+                "service_level": "Level 2",
+                "service_type_id": 6
+            },
+            {
+                "catalog_id": 3,
+                "sub_catalog_name": "Break-fix of issues without changing application code",
+                "service_level": "Level 2",
+                "service_type_id": 6
+            },
+            {
+                "catalog_id": 3,
+                "sub_catalog_name": "Triage of Issues/tickets",
+                "service_level": "Level 2",
+                "service_type_id": 6
+            },
+            {
+                "catalog_id": 3,
+                "sub_catalog_name": "Issues analysis and hot fix (no code change)",
+                "service_level": "Level 2",
+                "service_type_id": 6
+            },
+            {
+                "catalog_id": 3,
+                "sub_catalog_name": "Application Configuration",
+                "service_level": "Level 2",
+                "service_type_id": 6
+            },
+            {
+                "catalog_id": 3,
+                "sub_catalog_name": "Application Performance Monitoring",
+                "service_level": "Level 2",
+                "service_type_id": 4
+            },
+            {
+                "catalog_id": 3,
+                "sub_catalog_name": "Error Log Analysis",
+                "service_level": "Level 2",
+                "service_type_id": 6
+            },
+            {
+                "catalog_id": 4,
+                "sub_catalog_name": "DB Maintenance, Archiving and Housekeeping",
+                "service_level": "Level 2",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 4,
+                "sub_catalog_name": "Application Level Housekeeping activities",
+                "service_level": "Level 2",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 4,
+                "sub_catalog_name": "Maintenance of workflows",
+                "service_level": "Level 2",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 4,
+                "sub_catalog_name": "Upgrades, Patches, & Configuration Management",
+                "service_level": "Level 2",
+                "service_type_id": 5
+            },
+            {
+                "catalog_id": 4,
+                "sub_catalog_name": "Problem Management",
+                "service_level": "Level 3",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 4,
+                "sub_catalog_name": "Change & Release Management",
+                "service_level": "Level 3",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 4,
+                "sub_catalog_name": "Configuration Management",
+                "service_level": "Level 3",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 4,
+                "sub_catalog_name": "System Health Check",
+                "service_level": "Level 2",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 5,
+                "sub_catalog_name": "Security Incident Response",
+                "service_level": "Level 3",
+                "service_type_id": 2
+            },
+            {
+                "catalog_id": 5,
+                "sub_catalog_name": "Compliance Monitoring",
+                "service_level": "Level 2",
+                "service_type_id": 1
+            },
+            {
+                "catalog_id": 5,
+                "sub_catalog_name": "Vulnerability Assessment",
+                "service_level": "Level 2",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 6,
+                "sub_catalog_name": "Cloud Infrastructure Monitoring",
+                "service_level": "Level 2",
+                "service_type_id": 4
+            },
+            {
+                "catalog_id": 6,
+                "sub_catalog_name": "Cloud Application Support",
+                "service_level": "Level 2",
+                "service_type_id": 6
+            },
+            {
+                "catalog_id": 6,
+                "sub_catalog_name": "Cloud Migration Assistance",
+                "service_level": "Level 3",
+                "service_type_id": 7
+            },
+            {
+                "catalog_id": 7,
+                "sub_catalog_name": "Network Health Monitoring",
+                "service_level": "Level 2",
+                "service_type_id": 4
+            },
+            {
+                "catalog_id": 7,
+                "sub_catalog_name": "Network Configuration",
+                "service_level": "Level 2",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 7,
+                "sub_catalog_name": "Network Security Assessment",
+                "service_level": "Level 3",
+                "service_type_id": 1
+            },
+            {
+                "catalog_id": 8,
+                "sub_catalog_name": "Database Backup & Recovery",
+                "service_level": "Level 2",
+                "service_type_id": 3
+            },
+            {
+                "catalog_id": 8,
+                "sub_catalog_name": "Database Performance Tuning",
+                "service_level": "Level 3",
+                "service_type_id": 4
+            }
+        ]
+
         # Add service types
         service_types_to_add = [ServiceType(**service_type) for service_type in service_type_data]
         db.add_all(service_types_to_add)
+        db.commit()
+
+        # Add catalogs
+        catalogs_to_add = [Catalog(**catalog) for catalog in catalog_data]
+        db.add_all(catalogs_to_add)
+        db.commit()
+
+        # Add subcatalogs
+        subcatalogs_to_add = [SubCatalog(**subcatalog) for subcatalog in subcatalog_data]
+        db.add_all(subcatalogs_to_add)
         db.commit()
 
 # Startup event to initialize catalogs and subcatalogs
@@ -265,312 +505,6 @@ async def startup():
     finally:
         db.close()
 # User Routes
-
-catalog_data = [
-    {"catalog_name": "End-user Compute", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Service Desk", "is_vertical": False, "user_id": 1},
-    {"catalog_name": "Application Support", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Maintenance Services", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Security & Compliance", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Cloud Services", "is_vertical": False, "user_id": 1},
-    {"catalog_name": "Network Operations", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Database Management", "is_vertical": False, "user_id": 1}
-]
-
-subcatalog_data = [
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Access/Privilege Issues",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Helpdesk, administration and Super Users",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Ad-hoc reports (Queries)",
-        "service_level": "Level 2",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Device Configuration Assistance",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Peripheral Device Setup & Troubleshooting",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Incident Management",
-        "service_level": "Level 3",
-        "service_type_id": 2
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Service Request",
-        "service_level": "Level 3",
-        "service_type_id": 7
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Functional & Hierarchical Escalation",
-        "service_level": "Level 1",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Monitoring Communications & Reporting",
-        "service_level": "Level 1",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "First-line Technical Support",
-        "service_level": "Level 1",
-        "service_type_id": 2
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Data Issues analysis & fix",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Break-fix of issues without changing application code",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Triage of Issues/tickets",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Issues analysis and hot fix (no code change)",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Application Configuration",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Application Performance Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 4
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Error Log Analysis",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "DB Maintenance, Archiving and Housekeeping",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Application Level Housekeeping activities",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Maintenance of workflows",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Upgrades, Patches, & Configuration Management",
-        "service_level": "Level 2",
-        "service_type_id": 5
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Problem Management",
-        "service_level": "Level 3",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Change & Release Management",
-        "service_level": "Level 3",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Configuration Management",
-        "service_level": "Level 3",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "System Health Check",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 5,
-        "sub_catalog_name": "Security Incident Response",
-        "service_level": "Level 3",
-        "service_type_id": 2
-    },
-    {
-        "catalog_id": 5,
-        "sub_catalog_name": "Compliance Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 5,
-        "sub_catalog_name": "Vulnerability Assessment",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 6,
-        "sub_catalog_name": "Cloud Infrastructure Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 4
-    },
-    {
-        "catalog_id": 6,
-        "sub_catalog_name": "Cloud Application Support",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 6,
-        "sub_catalog_name": "Cloud Migration Assistance",
-        "service_level": "Level 3",
-        "service_type_id": 7
-    },
-    {
-        "catalog_id": 7,
-        "sub_catalog_name": "Network Health Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 4
-    },
-    {
-        "catalog_id": 7,
-        "sub_catalog_name": "Network Configuration",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 7,
-        "sub_catalog_name": "Network Security Assessment",
-        "service_level": "Level 3",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 8,
-        "sub_catalog_name": "Database Backup & Recovery",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 8,
-        "sub_catalog_name": "Database Performance Tuning",
-        "service_level": "Level 3",
-        "service_type_id": 4
-    }
-]
-
-###############
-#intialize data
-###############
-
-@router.post("/users/{user_id}/add_catalog", response_model=List[CatalogResponse])
-async def create_catalogs_for_user(
-    user_id: int, 
-    db: Session = Depends(get_db)
-):
-    # Validate user exists
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Prepare catalog objects
-    catalog_objs = [
-        Catalog(
-            user_id=user_id, 
-            catalog_name=catalog['catalog_name'],
-            is_vertical=catalog['is_vertical']
-        ) for catalog in catalog_data
-    ]
-
-    # Add and commit catalogs
-    try:
-        db.add_all(catalog_objs)
-        db.commit()
-        
-        # Refresh to get generated IDs
-        for catalog in catalog_objs:
-            db.refresh(catalog)
-        
-        return catalog_objs
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error creating catalogs: {str(e)}") 
-
-@router.post("/users/add_subcatalog", response_model=List[SubCatalogResponse])
-async def create_subcatalogs_for_catalog(
-    db: Session = Depends(get_db)
-):
-    # Validate service types exist
-    for subcatalog in subcatalog_data:
-        service_type = db.query(ServiceType).filter(ServiceType.id == subcatalog['service_type_id']).first()
-        if not service_type:
-            raise HTTPException(status_code=404, detail=f"Service type {subcatalog['service_type_id']} not found")
-    
-    # Prepare subcatalog objects
-    subcatalog_objs = [
-        SubCatalog(
-            catalog_id=subcatalog['catalog_id'],
-            service_type_id=subcatalog['service_type_id'],
-            sub_catalog_name=subcatalog['sub_catalog_name'],
-            service_level=subcatalog['service_level']
-        ) for subcatalog in subcatalog_data
-    ]
-    
-    # Add and commit subcatalogs
-    try:
-        db.add_all(subcatalog_objs)
-        db.commit()
-       
-        # Refresh to get generated IDs
-        for subcatalog in subcatalog_objs:
-            db.refresh(subcatalog)
-       
-        return subcatalog_objs
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error creating subcatalogs: {str(e)}")
-
-############
-#USER ROUTES 
-############
-
 @router.post("/register", response_model=UserResponse)
 async def register(user: UserRegister, db: Session = Depends(get_db)):
     # Validate passwords match
@@ -630,10 +564,21 @@ async def get_catalog_by_id(catalog_id: int, db: Session = Depends(get_db)):
     
     return catalogs
 
-#####################
-# Service Type Routes
-#####################
+@router.get("/catalog/by-user/{user_id}", response_model=List[CatalogResponse])
+async def get_catalogs_by_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Retrieve all catalogs for the user
+    catalogs = db.query(Catalog).filter(Catalog.user_id == user_id).all()
+    
+    if not catalogs:
+        raise HTTPException(status_code=404, detail="No catalogs found for this user")
+    
+    return catalogs
 
+# Service Type Routes
 @router.post("/service-type", response_model=ServiceTypeResponse)
 async def create_service_type(service_type: ServiceTypeCreate, db: Session = Depends(get_db)):
     db_service_type = ServiceType(**service_type.dict())
@@ -660,28 +605,7 @@ async def get_service_type(service_type_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Service type not found")
     return service_type
 
-@router.put("/service-type/user/{service_type_id}", response_model=ServiceTypeResponse)
-async def update_service_type_name(
-    service_type_id: int, 
-    service_type: ServiceTypeCreate, 
-    db: Session = Depends(get_db)
-):
-    db_service_type = db.query(ServiceType).filter(ServiceType.id == service_type_id).first()
-    if not db_service_type:
-        raise HTTPException(status_code=404, detail="Service type not found")
-    
-    try:
-        # Only update service_type_name, ignore other fields
-        db_service_type.service_type_name = service_type.service_type_name
-        
-        db.commit()
-        db.refresh(db_service_type)
-        return db_service_type
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error updating service type name: {str(e)}")
-
-@router.put("/service-type/admin/{service_type_id}", response_model=ServiceTypeResponse)
+@router.put("/service-type/{service_type_id}", response_model=ServiceTypeResponse)
 async def update_service_type(service_type_id: int, service_type: ServiceTypeCreate, db: Session = Depends(get_db)):
     db_service_type = db.query(ServiceType).filter(ServiceType.id == service_type_id).first()
     if not db_service_type:
@@ -712,10 +636,7 @@ async def delete_service_type(service_type_id: int, db: Session = Depends(get_db
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting service type: {str(e)}")
 
-###############################
 # Catalog Routes (with user_id)
-###############################
-
 @router.post("/user/{user_id}/catalog", response_model=CatalogResponse)
 async def create_catalog(user_id: int, catalog: CatalogCreate, db: Session = Depends(get_db)):
     # Check if user exists
@@ -796,10 +717,7 @@ async def delete_catalog(user_id: int, catalog_id: int, db: Session = Depends(ge
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting catalog: {str(e)}")
 
-#####################################
 # SubCatalog Routes (with catalog_id)
-#####################################
-
 @router.post("/catalog/{catalog_id}/subcatalog", response_model=SubCatalogResponse)
 async def create_subcatalog(catalog_id: int, subcatalog: SubCatalogCreate, db: Session = Depends(get_db)):
     # Check if catalog exists
@@ -885,10 +803,7 @@ async def delete_subcatalog(catalog_id: int, subcatalog_id: int, db: Session = D
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting subcatalog: {str(e)}")
 
-##################################
 # Topic Routes (with subcatalog_id)
-##################################
-
 @router.post("/subcatalog/{subcatalog_id}/topic", response_model=TopicResponse)
 async def create_topic(subcatalog_id: int, topic: TopicCreate, db: Session = Depends(get_db)):
     # Check if subcatalog exists

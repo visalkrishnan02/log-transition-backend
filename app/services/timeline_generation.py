@@ -35,6 +35,7 @@ dspy.settings.configure(lm=turbo, cache=False)
 class TimelineGenerationSignature(dspy.Signature):
     service_type = dspy.InputField()
     event_type = dspy.InputField()
+    task_summary = dspy.InputField()
     timeline = dspy.OutputField(desc = "Generate minimum required number of days required to complete the event_type of service_type. Return in the format : x days. **CRITICAL REQUIREMENT :- YOU SHOULD ONLY RETURN THE NUMBER OF DAYS**")
 
 class TimelineCreation(dspy.Module):
