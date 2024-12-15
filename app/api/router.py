@@ -70,6 +70,7 @@ class SubCatalog(Base):
     catalog = relationship("Catalog", back_populates="subcatalogs")
     service_type = relationship("ServiceType", back_populates="subcatalogs")
     topics = relationship("Topic", back_populates="subcatalog")
+    risks = relationship("SubCatalogRisk", back_populates="subcatalog")
 
 class Topic(Base):
     __tablename__ = "topics"
@@ -80,6 +81,29 @@ class Topic(Base):
     
     # Relationships
     subcatalog = relationship("SubCatalog", back_populates="topics")
+    risks = relationship("TopicRisk", back_populates="topic")
+
+class SubCatalogRisk(Base):
+    __tablename__ = "subcatalog_risks"
+    
+    id = Column(Integer, primary_key=True, index=True)  # Unique primary key
+    sub_catalog_id = Column(Integer, ForeignKey('subcatalogs.id'), nullable=False)
+    risk = Column(String(500), nullable=True)
+    status = Column(String(100), nullable=True)
+    
+    # Relationship
+    subcatalog = relationship("SubCatalog", back_populates="risks")
+
+class TopicRisk(Base):
+    __tablename__ = "topic_risks"
+    
+    id = Column(Integer, primary_key=True, index=True)  # Unique primary key
+    topic_id = Column(Integer, ForeignKey('topics.id'), nullable=False)
+    risk = Column(String(500), nullable=True)
+    status = Column(String(100), nullable=True)
+    
+    # Relationship
+    topic = relationship("Topic", back_populates="risks")
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
@@ -163,6 +187,26 @@ class TopicResponse(BaseModel):
     name: str
     description: Optional[str]
 
+    class Config:
+        from_attributes = True
+
+class SubCatalogRiskCreate(BaseModel):
+    sub_catalog_id: int
+    risk: Optional[str] = None
+    status: Optional[str] = None
+
+class SubCatalogRiskResponse(SubCatalogRiskCreate):
+    id: int  
+    class Config:
+        from_attributes = True
+
+class TopicRiskCreate(BaseModel):
+    topic_id: int
+    risk: Optional[str] = None
+    status: Optional[str] = None
+
+class TopicRiskResponse(TopicRiskCreate):
+    id: int 
     class Config:
         from_attributes = True
 
@@ -969,3 +1013,154 @@ async def delete_topic(subcatalog_id: int, topic_id: int, db: Session = Depends(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting topic: {str(e)}")
 
+########################
+# SUBCATALOG RISK ROUTES
+########################
+@router.post("/subcatalog-risks/", response_model=SubCatalogRiskResponse)
+def create_subcatalog_risk(
+    subcatalog_risk: SubCatalogRiskCreate, 
+    db: Session = Depends(get_db)
+):
+    # Check if subcatalog exists
+    existing_subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_risk.sub_catalog_id).first()
+    if not existing_subcatalog:
+        raise HTTPException(status_code=404, detail="Subcatalog not found")
+    
+    # Create new subcatalog risk
+    db_subcatalog_risk = SubCatalogRisk(**subcatalog_risk.dict())
+    db.add(db_subcatalog_risk)
+    db.commit()
+    db.refresh(db_subcatalog_risk)
+    return db_subcatalog_risk
+
+@router.get("/subcatalog-risks/", response_model=List[SubCatalogRiskResponse])
+def read_subcatalog_risks(db: Session = Depends(get_db)):
+    subcatalog_risks = db.query(SubCatalogRisk).all()
+    return subcatalog_risks
+
+@router.get("/subcatalog-risks/{risk_id}", response_model=SubCatalogRiskResponse)
+def read_subcatalog_risk(
+    risk_id: int, 
+    db: Session = Depends(get_db)
+):
+    subcatalog_risk = db.query(SubCatalogRisk).filter(SubCatalogRisk.id == risk_id).first()
+    if not subcatalog_risk:
+        raise HTTPException(status_code=404, detail="Subcatalog risk not found")
+    return subcatalog_risk
+
+@router.get("/subcatalog-risks/by-subcatalog/{sub_catalog_id}", response_model=List[SubCatalogRiskResponse])
+def read_subcatalog_risks_by_subcatalog(
+    sub_catalog_id: int, 
+    db: Session = Depends(get_db)
+):
+    subcatalog_risks = db.query(SubCatalogRisk).filter(SubCatalogRisk.sub_catalog_id == sub_catalog_id).all()
+    return subcatalog_risks
+
+@router.put("/subcatalog-risks/{risk_id}", response_model=SubCatalogRiskResponse)
+def update_subcatalog_risk(
+    risk_id: int, 
+    subcatalog_risk: SubCatalogRiskCreate, 
+    db: Session = Depends(get_db)
+):
+    # Find existing risk
+    db_subcatalog_risk = db.query(SubCatalogRisk).filter(SubCatalogRisk.id == risk_id).first()
+    if not db_subcatalog_risk:
+        raise HTTPException(status_code=404, detail="Subcatalog risk not found")
+    
+    # Update fields
+    for key, value in subcatalog_risk.dict().items():
+        setattr(db_subcatalog_risk, key, value)
+    
+    db.commit()
+    db.refresh(db_subcatalog_risk)
+    return db_subcatalog_risk
+
+@router.delete("/subcatalog-risks/{risk_id}")
+def delete_subcatalog_risk(
+    risk_id: int, 
+    db: Session = Depends(get_db)
+):
+    # Find existing risk
+    db_subcatalog_risk = db.query(SubCatalogRisk).filter(SubCatalogRisk.id == risk_id).first()
+    if not db_subcatalog_risk:
+        raise HTTPException(status_code=404, detail="Subcatalog risk not found")
+    
+    db.delete(db_subcatalog_risk)
+    db.commit()
+    return {"detail": "Subcatalog risk deleted successfully"}
+###################
+# TOPIC RISK ROUTES
+###################
+
+@router.post("/topic-risks/", response_model=TopicRiskResponse)
+def create_topic_risk(
+    topic_risk: TopicRiskCreate, 
+    db: Session = Depends(get_db)
+):
+    # Check if topic exists
+    existing_topic = db.query(Topic).filter(Topic.id == topic_risk.topic_id).first()
+    if not existing_topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    
+    # Create new topic risk
+    db_topic_risk = TopicRisk(**topic_risk.dict())
+    db.add(db_topic_risk)
+    db.commit()
+    db.refresh(db_topic_risk)
+    return db_topic_risk
+
+@router.get("/topic-risks/", response_model=List[TopicRiskResponse])
+def read_topic_risks(db: Session = Depends(get_db)):
+    topic_risks = db.query(TopicRisk).all()
+    return topic_risks
+
+@router.get("/topic-risks/{risk_id}", response_model=TopicRiskResponse)
+def read_topic_risk(
+    risk_id: int, 
+    db: Session = Depends(get_db)
+):
+    topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
+    if not topic_risk:
+        raise HTTPException(status_code=404, detail="Topic risk not found")
+    return topic_risk
+
+@router.get("/topic-risks/by-topic/{topic_id}", response_model=List[TopicRiskResponse])
+def read_topic_risks_by_topic(
+    topic_id: int, 
+    db: Session = Depends(get_db)
+):
+    topic_risks = db.query(TopicRisk).filter(TopicRisk.topic_id == topic_id).all()
+    return topic_risks
+
+@router.put("/topic-risks/{risk_id}", response_model=TopicRiskResponse)
+def update_topic_risk(
+    risk_id: int, 
+    topic_risk: TopicRiskCreate, 
+    db: Session = Depends(get_db)
+):
+    # Find existing risk
+    db_topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
+    if not db_topic_risk:
+        raise HTTPException(status_code=404, detail="Topic risk not found")
+    
+    # Update fields
+    for key, value in topic_risk.dict().items():
+        setattr(db_topic_risk, key, value)
+    
+    db.commit()
+    db.refresh(db_topic_risk)
+    return db_topic_risk
+
+@router.delete("/topic-risks/{risk_id}")
+def delete_topic_risk(
+    risk_id: int, 
+    db: Session = Depends(get_db)
+):
+    # Find existing risk
+    db_topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
+    if not db_topic_risk:
+        raise HTTPException(status_code=404, detail="Topic risk not found")
+    
+    db.delete(db_topic_risk)
+    db.commit()
+    return {"detail": "Topic risk deleted successfully"}
