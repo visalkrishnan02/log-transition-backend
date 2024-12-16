@@ -31,6 +31,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    is_admin = Column(Boolean, default=False, nullable=False)
     
     # Relationships
     catalogs = relationship("Catalog", back_populates="user")
@@ -124,6 +125,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     created_at: datetime
+    is_admin: bool
 
     class Config:
         from_attributes = True
@@ -620,19 +622,20 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     # Validate passwords match
     if user.password != user.confirmPassword:
         raise HTTPException(status_code=400, detail="Passwords do not match")
-    
+   
     # Check if email exists
     if db.query(User).filter(User.email == user.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+   
     # Create new user
     hashed_password = hash_password(user.password)
     db_user = User(
         name=user.name,
         email=user.email,
-        password=hashed_password
+        password=hashed_password,
+        # is_admin=False  # Explicitly set to False
     )
-    
+   
     try:
         db.add(db_user)
         db.commit()
@@ -663,16 +666,6 @@ async def get_user(user_id: int, db: Session = Depends(get_db)):
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
-
-#Catalog Routes
-@router.get("/catalog/by-id/{catalog_id}", response_model=List[CatalogResponse])
-async def get_catalog_by_id(catalog_id: int, db: Session = Depends(get_db)):
-    catalogs = db.query(Catalog).filter(Catalog.id == catalog_id).all()
-    
-    if not catalogs:
-        raise HTTPException(status_code=404, detail="No catalog found with the given ID")
-    
-    return catalogs
 
 #####################
 # Service Type Routes
@@ -705,11 +698,7 @@ async def get_service_type(service_type_id: int, db: Session = Depends(get_db)):
     return service_type
 
 @router.put("/service-type/user/{service_type_id}", response_model=ServiceTypeResponse)
-async def update_service_type_name(
-    service_type_id: int, 
-    service_type: ServiceTypeCreate, 
-    db: Session = Depends(get_db)
-):
+async def update_service_type_name(service_type_id: int, service_type: ServiceTypeCreate, db: Session = Depends(get_db)):
     db_service_type = db.query(ServiceType).filter(ServiceType.id == service_type_id).first()
     if not db_service_type:
         raise HTTPException(status_code=404, detail="Service type not found")
@@ -784,29 +773,23 @@ async def get_user_catalogs(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     
     catalogs = db.query(Catalog).filter(Catalog.user_id == user_id).all()
-    if not catalogs:
-        raise HTTPException(status_code=404, detail="No catalogs found for this user")
+    # if not catalogs:
+    #     raise HTTPException(status_code=404, detail="No catalogs found for this user")
     
     return catalogs
 
-@router.get("/user/{user_id}/catalog/{catalog_id}", response_model=CatalogResponse)
-async def get_specific_catalog(user_id: int, catalog_id: int, db: Session = Depends(get_db)):
-    db_catalog = db.query(Catalog).filter(
-        Catalog.id == catalog_id, 
-        Catalog.user_id == user_id
-    ).first()
+@router.get("/catalog/{catalog_id}", response_model=CatalogResponse)
+async def get_specific_catalog(catalog_id: int, db: Session = Depends(get_db)):
+    db_catalog = db.query(Catalog).filter(Catalog.id == catalog_id).first()
     
     if not db_catalog:
         raise HTTPException(status_code=404, detail="Catalog not found")
     
     return db_catalog
 
-@router.put("/user/{user_id}/catalog/{catalog_id}", response_model=CatalogResponse)
-async def update_catalog(user_id: int, catalog_id: int, catalog: CatalogCreate, db: Session = Depends(get_db)):
-    db_catalog = db.query(Catalog).filter(
-        Catalog.id == catalog_id, 
-        Catalog.user_id == user_id
-    ).first()
+@router.put("/catalog/{catalog_id}", response_model=CatalogResponse)
+async def update_catalog(catalog_id: int, catalog: CatalogCreate, db: Session = Depends(get_db)):
+    db_catalog = db.query(Catalog).filter(Catalog.id == catalog_id).first()
     
     if not db_catalog:
         raise HTTPException(status_code=404, detail="Catalog not found")
@@ -822,12 +805,9 @@ async def update_catalog(user_id: int, catalog_id: int, catalog: CatalogCreate, 
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating catalog: {str(e)}")
 
-@router.delete("/user/{user_id}/catalog/{catalog_id}")
-async def delete_catalog(user_id: int, catalog_id: int, db: Session = Depends(get_db)):
-    db_catalog = db.query(Catalog).filter(
-        Catalog.id == catalog_id, 
-        Catalog.user_id == user_id
-    ).first()
+@router.delete("/catalog/{catalog_id}")
+async def delete_catalog(catalog_id: int, db: Session = Depends(get_db)):
+    db_catalog = db.query(Catalog).filter(Catalog.id == catalog_id).first()
     
     if not db_catalog:
         raise HTTPException(status_code=404, detail="Catalog not found")
@@ -878,24 +858,18 @@ async def get_catalog_subcatalogs(catalog_id: int, db: Session = Depends(get_db)
     
     return subcatalogs
 
-@router.get("/catalog/{catalog_id}/subcatalog/{subcatalog_id}", response_model=SubCatalogResponse)
-async def get_specific_subcatalog(catalog_id: int, subcatalog_id: int, db: Session = Depends(get_db)):
-    db_subcatalog = db.query(SubCatalog).filter(
-        SubCatalog.id == subcatalog_id, 
-        SubCatalog.catalog_id == catalog_id
-    ).first()
+@router.get("/subcatalog/{subcatalog_id}", response_model=SubCatalogResponse)
+async def get_specific_subcatalog(subcatalog_id: int, db: Session = Depends(get_db)):
+    db_subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
     
     if not db_subcatalog:
         raise HTTPException(status_code=404, detail="Subcatalog not found")
     
     return db_subcatalog
 
-@router.put("/catalog/{catalog_id}/subcatalog/{subcatalog_id}", response_model=SubCatalogResponse)
-async def update_subcatalog(catalog_id: int, subcatalog_id: int, subcatalog: SubCatalogCreate, db: Session = Depends(get_db)):
-    db_subcatalog = db.query(SubCatalog).filter(
-        SubCatalog.id == subcatalog_id, 
-        SubCatalog.catalog_id == catalog_id
-    ).first()
+@router.put("/subcatalog/{subcatalog_id}", response_model=SubCatalogResponse)
+async def update_subcatalog(subcatalog_id: int, subcatalog: SubCatalogCreate, db: Session = Depends(get_db)):
+    db_subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
     
     if not db_subcatalog:
         raise HTTPException(status_code=404, detail="Subcatalog not found")
@@ -911,12 +885,9 @@ async def update_subcatalog(catalog_id: int, subcatalog_id: int, subcatalog: Sub
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating subcatalog: {str(e)}")
 
-@router.delete("/catalog/{catalog_id}/subcatalog/{subcatalog_id}")
-async def delete_subcatalog(catalog_id: int, subcatalog_id: int, db: Session = Depends(get_db)):
-    db_subcatalog = db.query(SubCatalog).filter(
-        SubCatalog.id == subcatalog_id, 
-        SubCatalog.catalog_id == catalog_id
-    ).first()
+@router.delete("/subcatalog/{subcatalog_id}")
+async def delete_subcatalog(subcatalog_id: int, db: Session = Depends(get_db)):
+    db_subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
     
     if not db_subcatalog:
         raise HTTPException(status_code=404, detail="Subcatalog not found")
@@ -962,24 +933,18 @@ async def get_subcatalog_topics(subcatalog_id: int, db: Session = Depends(get_db
     
     return topics
 
-@router.get("/subcatalog/{subcatalog_id}/topic/{topic_id}", response_model=TopicResponse)
-async def get_specific_topic(subcatalog_id: int, topic_id: int, db: Session = Depends(get_db)):
-    db_topic = db.query(Topic).filter(
-        Topic.id == topic_id, 
-        Topic.subcatalog_id == subcatalog_id
-    ).first()
+@router.get("/topic/{topic_id}", response_model=TopicResponse)
+async def get_specific_topic(topic_id: int, db: Session = Depends(get_db)):
+    db_topic = db.query(Topic).filter(Topic.id == topic_id).first()
     
     if not db_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     
     return db_topic
 
-@router.put("/subcatalog/{subcatalog_id}/topic/{topic_id}", response_model=TopicResponse)
-async def update_topic(subcatalog_id: int, topic_id: int, topic: TopicCreate, db: Session = Depends(get_db)):
-    db_topic = db.query(Topic).filter(
-        Topic.id == topic_id, 
-        Topic.subcatalog_id == subcatalog_id
-    ).first()
+@router.put("/topic/{topic_id}", response_model=TopicResponse)
+async def update_topic(topic_id: int, topic: TopicCreate, db: Session = Depends(get_db)):
+    db_topic = db.query(Topic).filter(Topic.id == topic_id).first()
     
     if not db_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -995,12 +960,9 @@ async def update_topic(subcatalog_id: int, topic_id: int, topic: TopicCreate, db
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating topic: {str(e)}")
 
-@router.delete("/subcatalog/{subcatalog_id}/topic/{topic_id}")
-async def delete_topic(subcatalog_id: int, topic_id: int, db: Session = Depends(get_db)):
-    db_topic = db.query(Topic).filter(
-        Topic.id == topic_id, 
-        Topic.subcatalog_id == subcatalog_id
-    ).first()
+@router.delete("/topic/{topic_id}")
+async def delete_topic(topic_id: int, db: Session = Depends(get_db)):
+    db_topic = db.query(Topic).filter(Topic.id == topic_id).first()
     
     if not db_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -1016,11 +978,8 @@ async def delete_topic(subcatalog_id: int, topic_id: int, db: Session = Depends(
 ########################
 # SUBCATALOG RISK ROUTES
 ########################
-@router.post("/subcatalog-risks/", response_model=SubCatalogRiskResponse)
-def create_subcatalog_risk(
-    subcatalog_risk: SubCatalogRiskCreate, 
-    db: Session = Depends(get_db)
-):
+@router.post("/subcatalog-risks", response_model=SubCatalogRiskResponse)
+def create_subcatalog_risk(subcatalog_risk: SubCatalogRiskCreate, db: Session = Depends(get_db)):
     # Check if subcatalog exists
     existing_subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_risk.sub_catalog_id).first()
     if not existing_subcatalog:
@@ -1033,35 +992,20 @@ def create_subcatalog_risk(
     db.refresh(db_subcatalog_risk)
     return db_subcatalog_risk
 
-@router.get("/subcatalog-risks/", response_model=List[SubCatalogRiskResponse])
-def read_subcatalog_risks(db: Session = Depends(get_db)):
-    subcatalog_risks = db.query(SubCatalogRisk).all()
+@router.get("/subcatalog/{sub_catalog_id}/subcatalog-risks", response_model=List[SubCatalogRiskResponse])
+def read_subcatalog_risks_by_subcatalog(sub_catalog_id: int, db: Session = Depends(get_db)):
+    subcatalog_risks = db.query(SubCatalogRisk).filter(SubCatalogRisk.sub_catalog_id == sub_catalog_id).all()
     return subcatalog_risks
 
 @router.get("/subcatalog-risks/{risk_id}", response_model=SubCatalogRiskResponse)
-def read_subcatalog_risk(
-    risk_id: int, 
-    db: Session = Depends(get_db)
-):
+def read_subcatalog_risk(risk_id: int, db: Session = Depends(get_db)):
     subcatalog_risk = db.query(SubCatalogRisk).filter(SubCatalogRisk.id == risk_id).first()
     if not subcatalog_risk:
         raise HTTPException(status_code=404, detail="Subcatalog risk not found")
     return subcatalog_risk
 
-@router.get("/subcatalog-risks/by-subcatalog/{sub_catalog_id}", response_model=List[SubCatalogRiskResponse])
-def read_subcatalog_risks_by_subcatalog(
-    sub_catalog_id: int, 
-    db: Session = Depends(get_db)
-):
-    subcatalog_risks = db.query(SubCatalogRisk).filter(SubCatalogRisk.sub_catalog_id == sub_catalog_id).all()
-    return subcatalog_risks
-
 @router.put("/subcatalog-risks/{risk_id}", response_model=SubCatalogRiskResponse)
-def update_subcatalog_risk(
-    risk_id: int, 
-    subcatalog_risk: SubCatalogRiskCreate, 
-    db: Session = Depends(get_db)
-):
+def update_subcatalog_risk(risk_id: int, subcatalog_risk: SubCatalogRiskCreate, db: Session = Depends(get_db)):
     # Find existing risk
     db_subcatalog_risk = db.query(SubCatalogRisk).filter(SubCatalogRisk.id == risk_id).first()
     if not db_subcatalog_risk:
@@ -1076,10 +1020,7 @@ def update_subcatalog_risk(
     return db_subcatalog_risk
 
 @router.delete("/subcatalog-risks/{risk_id}")
-def delete_subcatalog_risk(
-    risk_id: int, 
-    db: Session = Depends(get_db)
-):
+def delete_subcatalog_risk(risk_id: int, db: Session = Depends(get_db)):
     # Find existing risk
     db_subcatalog_risk = db.query(SubCatalogRisk).filter(SubCatalogRisk.id == risk_id).first()
     if not db_subcatalog_risk:
@@ -1092,11 +1033,8 @@ def delete_subcatalog_risk(
 # TOPIC RISK ROUTES
 ###################
 
-@router.post("/topic-risks/", response_model=TopicRiskResponse)
-def create_topic_risk(
-    topic_risk: TopicRiskCreate, 
-    db: Session = Depends(get_db)
-):
+@router.post("/topic-risks", response_model=TopicRiskResponse)
+def create_topic_risk(topic_risk: TopicRiskCreate, db: Session = Depends(get_db)):
     # Check if topic exists
     existing_topic = db.query(Topic).filter(Topic.id == topic_risk.topic_id).first()
     if not existing_topic:
@@ -1109,35 +1047,20 @@ def create_topic_risk(
     db.refresh(db_topic_risk)
     return db_topic_risk
 
-@router.get("/topic-risks/", response_model=List[TopicRiskResponse])
-def read_topic_risks(db: Session = Depends(get_db)):
-    topic_risks = db.query(TopicRisk).all()
+@router.get("/topic/{topic_id}/topic-risks", response_model=List[TopicRiskResponse])
+def read_topic_risks_by_topic(topic_id: int, db: Session = Depends(get_db)):
+    topic_risks = db.query(TopicRisk).filter(TopicRisk.topic_id == topic_id).all()
     return topic_risks
 
 @router.get("/topic-risks/{risk_id}", response_model=TopicRiskResponse)
-def read_topic_risk(
-    risk_id: int, 
-    db: Session = Depends(get_db)
-):
+def read_topic_risk(risk_id: int, db: Session = Depends(get_db)):
     topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
     if not topic_risk:
         raise HTTPException(status_code=404, detail="Topic risk not found")
     return topic_risk
 
-@router.get("/topic-risks/by-topic/{topic_id}", response_model=List[TopicRiskResponse])
-def read_topic_risks_by_topic(
-    topic_id: int, 
-    db: Session = Depends(get_db)
-):
-    topic_risks = db.query(TopicRisk).filter(TopicRisk.topic_id == topic_id).all()
-    return topic_risks
-
 @router.put("/topic-risks/{risk_id}", response_model=TopicRiskResponse)
-def update_topic_risk(
-    risk_id: int, 
-    topic_risk: TopicRiskCreate, 
-    db: Session = Depends(get_db)
-):
+def update_topic_risk(risk_id: int, topic_risk: TopicRiskCreate, db: Session = Depends(get_db)):
     # Find existing risk
     db_topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
     if not db_topic_risk:
@@ -1152,10 +1075,7 @@ def update_topic_risk(
     return db_topic_risk
 
 @router.delete("/topic-risks/{risk_id}")
-def delete_topic_risk(
-    risk_id: int, 
-    db: Session = Depends(get_db)
-):
+def delete_topic_risk(risk_id: int, db: Session = Depends(get_db)):
     # Find existing risk
     db_topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
     if not db_topic_risk:
