@@ -13,6 +13,12 @@ from app.services.service_analysis import analyze_service_tasks
 
 from fastapi import APIRouter
 from typing import List, Optional
+import math
+
+from langchain_openai import AzureChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.runnable import RunnableParallel, RunnableLambda
+from langchain.schema.output_parser import StrOutputParser
 
 router = APIRouter()
 
@@ -34,7 +40,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False, nullable=False)
     
     # Relationships
-    catalogs = relationship("Catalog", back_populates="user")
+    catalogs = relationship("Catalog", back_populates="user", cascade="all, delete-orphan")
 
 class Catalog(Base):
     __tablename__ = "catalogs"
@@ -45,7 +51,7 @@ class Catalog(Base):
     
     # Relationships
     user = relationship("User", back_populates="catalogs")
-    subcatalogs = relationship("SubCatalog", back_populates="catalog")
+    subcatalogs = relationship("SubCatalog", back_populates="catalog", cascade="all, delete-orphan")
 
 class ServiceType(Base):
     __tablename__ = "service_types"
@@ -62,7 +68,7 @@ class ServiceType(Base):
 class SubCatalog(Base):
     __tablename__ = "subcatalogs"
     id = Column(Integer, primary_key=True, index=True)
-    catalog_id = Column(Integer, ForeignKey('catalogs.id'), nullable=False)
+    catalog_id = Column(Integer, ForeignKey('catalogs.id', ondelete='CASCADE'), nullable=False)
     service_type_id = Column(Integer, ForeignKey('service_types.id'), nullable=False)
     sub_catalog_name = Column(String(255), nullable=False)
     service_level = Column(String(50), nullable=False)
@@ -70,25 +76,25 @@ class SubCatalog(Base):
     # Relationships
     catalog = relationship("Catalog", back_populates="subcatalogs")
     service_type = relationship("ServiceType", back_populates="subcatalogs")
-    topics = relationship("Topic", back_populates="subcatalog")
-    risks = relationship("SubCatalogRisk", back_populates="subcatalog")
+    topics = relationship("Topic", back_populates="subcatalog", cascade="all, delete-orphan")
+    risks = relationship("SubCatalogRisk", back_populates="subcatalog", cascade="all, delete-orphan")
 
 class Topic(Base):
     __tablename__ = "topics"
     id = Column(Integer, primary_key=True, index=True)
-    subcatalog_id = Column(Integer, ForeignKey('subcatalogs.id'), nullable=False)
+    subcatalog_id = Column(Integer, ForeignKey('subcatalogs.id', ondelete='CASCADE'), nullable=False)
     name = Column(String(255), nullable=False)
     description = Column(String(500), nullable=True)
     
     # Relationships
     subcatalog = relationship("SubCatalog", back_populates="topics")
-    risks = relationship("TopicRisk", back_populates="topic")
+    risks = relationship("TopicRisk", back_populates="topic", cascade="all, delete-orphan")
 
 class SubCatalogRisk(Base):
     __tablename__ = "subcatalog_risks"
     
     id = Column(Integer, primary_key=True, index=True)  # Unique primary key
-    sub_catalog_id = Column(Integer, ForeignKey('subcatalogs.id'), nullable=False)
+    sub_catalog_id = Column(Integer, ForeignKey('subcatalogs.id', ondelete='CASCADE'), nullable=False)
     risk = Column(String(500), nullable=True)
     status = Column(String(100), nullable=True)
     
@@ -99,7 +105,7 @@ class TopicRisk(Base):
     __tablename__ = "topic_risks"
     
     id = Column(Integer, primary_key=True, index=True)  # Unique primary key
-    topic_id = Column(Integer, ForeignKey('topics.id'), nullable=False)
+    topic_id = Column(Integer, ForeignKey('topics.id', ondelete='CASCADE'), nullable=False)
     risk = Column(String(500), nullable=True)
     status = Column(String(100), nullable=True)
     
@@ -1076,11 +1082,224 @@ def update_topic_risk(risk_id: int, topic_risk: TopicRiskCreate, db: Session = D
 
 @router.delete("/topic-risks/{risk_id}")
 def delete_topic_risk(risk_id: int, db: Session = Depends(get_db)):
+
     # Find existing risk
     db_topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
+
     if not db_topic_risk:
         raise HTTPException(status_code=404, detail="Topic risk not found")
     
     db.delete(db_topic_risk)
     db.commit()
     return {"detail": "Topic risk deleted successfully"}
+
+#####################
+# Timeline Generation
+#####################
+
+@router.get("/timeline-test/{subcatalog_id}/{event_type}", response_model=dict)
+def get_subcatalog_topics_by_event_type(subcatalog_id: int, event_type: str, db: Session = Depends(get_db)):
+
+    valid_event_types = ['kt_session', 'fwd_shadow', 'rev_shadow', 'cutover']
+    if event_type not in valid_event_types:
+        raise HTTPException(status_code=400, detail=f"Invalid event type. Must be one of {valid_event_types}")
+    
+    subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
+    if not subcatalog:
+        raise HTTPException(status_code=404, detail="Subcatalog not found")
+    
+    service_type = db.query(ServiceType).filter(ServiceType.id == subcatalog.service_type_id).first()
+    if not service_type:
+        raise HTTPException(status_code=404, detail="Service Type not found")
+    
+    topics = db.query(Topic).filter(Topic.subcatalog_id == subcatalog_id).all()
+
+    topic_summary = ""
+    for topic in topics:
+        topic_summary += f"The topic name is {topic.name}. "
+        topic_summary += f"The topic description is {topic.description}. "
+    
+    sub_catalog_name = subcatalog.sub_catalog_name
+
+    time_percent = getattr(service_type, event_type)
+
+    try:
+        model = AzureChatOpenAI(model="gpt-4o", api_version='2024-02-15-preview')
+        prompt_template = ChatPromptTemplate.from_messages(
+            [
+                ("system", "You are an expert analyst specializing in evaluating services and their associated tasks."),
+                (
+                    "human", 
+                    (
+                        "Given is the service name, {sub_catalog_name} and task summary of this service, {topic_summary}.\n"
+                        "By considering this 2 datas alone, calculate the number of days required to complete the tasks associated with this service.\n"
+                        "The maximum total time you can take is 10 days. Choose the appropriate total time. \n"
+                        "From the total required days obtained, the event called {event_type} takes {time_percent} percentage of the total time.\n"
+                        "Return me the days required for that event_type in number, example: 12. Dont add unwanted sentence, just return the integer only."
+                    )
+                ),
+            ]
+        )
+
+        def analyze_timeline(features):
+            timeline_template = ChatPromptTemplate.from_messages(
+                [
+                    ("system", "You are an expert in finding out the minimum number of days to complete a set of tasks."),
+                    (
+                        "human",
+                        "Given these features: {features}, return the required days in numbers, example: 12. Dont add unwanted sentence, just return the integer only.",
+                    ),
+                ]
+            )
+            return timeline_template.format_prompt(features=features)
+
+    
+        timeline_chain = (
+            RunnableLambda(lambda x: analyze_timeline(x)) | model | StrOutputParser()
+        )
+        
+        def combine_reponse(timeline):
+            result = {
+            "timeline": timeline
+            }
+            # Return the dictionary as a JSON response
+            return JSONResponse(result)
+
+        chain = (
+            prompt_template
+            | model
+            | StrOutputParser()
+            | RunnableParallel(branches={"timeline": timeline_chain})
+            | RunnableLambda(lambda x: combine_reponse(x["branches"]["timeline"]))
+        )
+
+        result = chain.invoke({"sub_catalog_name": sub_catalog_name, "topic_summary": topic_summary,"event_type":event_type, "time_percent": time_percent})
+        return result
+
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/timeline/{subcatalog_id}", response_model=dict)
+def get_subcatalog_topics_by_event_type(subcatalog_id: int, db: Session = Depends(get_db)):
+    
+    subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
+    if not subcatalog:
+        raise HTTPException(status_code=404, detail="Subcatalog not found")
+    
+    service_type = db.query(ServiceType).filter(ServiceType.id == subcatalog.service_type_id).first()
+    if not service_type:
+        raise HTTPException(status_code=404, detail="Service Type not found")
+    
+    topics = db.query(Topic).filter(Topic.subcatalog_id == subcatalog_id).all()
+
+    topic_summary = ""
+    for topic in topics:
+        topic_summary += f"The topic name is {topic.name}. "
+        topic_summary += f"The topic description is {topic.description}. "
+    
+    sub_catalog_name = subcatalog.sub_catalog_name
+
+    kt_percent = getattr(service_type, "kt_session")
+    fwd_percent = getattr(service_type, "fwd_shadow")
+    rev_percent = getattr(service_type, "rev_shadow")
+    cutover_percent = getattr(service_type, "cutover")
+
+    try:
+        model = AzureChatOpenAI(model="gpt-4o", api_version='2024-02-15-preview')
+        prompt_template = ChatPromptTemplate.from_messages(
+            [
+                ("system", "You are an expert analyst specializing in evaluating services and their associated tasks."),
+                (
+                    "human", 
+                    (
+                        "Given is the service name, {sub_catalog_name} and task summary of this service, {topic_summary}.\n"
+                        "Given the following details about the service and its tasks, analyze and provide the following:\n"
+                        "1. The criticality of the service and its tasks. Explain why they are critical or not.\n"
+                        "2. The complexity of the tasks, considering the processes, dependencies, and technical requirements.\n"
+                    )
+                ),
+            ]
+        )  
+
+        def analyze_criticality(features):
+            criticality_template = ChatPromptTemplate.from_messages(
+                [
+                    ("system", "You are an expert in finding out the criticality."),
+                    (
+                        "human",
+                        "Given these features: {features}, return the criticality in strictly single word, either low/high. Eg. High",
+                    ),
+                ]
+            )
+            return criticality_template.format_prompt(features=features)
+
+        def analyze_complexity(features):
+            complexity_template = ChatPromptTemplate.from_messages(
+                [
+                    ("system", "You are an expert in finding out the complexity."),
+                    (
+                        "human",
+                        "Given these features: {features}, return the complexity in strictly single word. either low/high. Eg. Low",
+                    ),
+                ]
+            )
+            return complexity_template.format_prompt(features=features)
+
+        # Simplify branches with LCEL
+        criticality_chain = (
+            RunnableLambda(lambda x: analyze_criticality(x)) | model | StrOutputParser()
+        )
+
+        complexity_chain = (
+            RunnableLambda(lambda x: analyze_complexity(x)) | model | StrOutputParser()
+        )
+
+        def combine_reponse(criticality, complexity):
+            result = {
+            "criticality": criticality,
+            "complexity": complexity,
+            }
+            return result
+
+
+        chain = (
+            prompt_template
+            | model
+            | StrOutputParser()
+            | RunnableParallel(branches={"criticality": criticality_chain, "complexity": complexity_chain})
+            | RunnableLambda(lambda x: combine_reponse(x["branches"]["criticality"], x["branches"]["complexity"]))
+        )
+
+        result = chain.invoke({"sub_catalog_name": sub_catalog_name, "topic_summary": topic_summary})
+        
+        total_time = 10
+
+        if( ("high" in result["complexity"].lower()) and ("high" in result["criticality"].lower()) ):
+            total_time = 12
+        elif( ("high" in result["complexity"].lower()) and ("low" in result["criticality"].lower()) ):
+            total_time = 10
+        elif( ("low" in result["complexity"].lower()) and ("high" in result["criticality"].lower()) ):
+            total_time = 8
+        elif( ("low" in result["complexity"].lower()) and ("low" in result["criticality"].lower()) ):
+            total_time = 6
+        else:
+            total_time = 10    
+
+        kt_weeks = ((int(kt_percent)/100)*total_time)
+        kt_days = math.floor(kt_weeks*7)
+        fwd_weeks = ((int(fwd_percent)/100)*total_time)
+        fwd_days = math.floor(fwd_weeks*7)
+        rev_weeks = ((int(rev_percent)/100)*total_time)
+        rev_days = math.floor(rev_weeks*7)
+        cutover_weeks = ((int(cutover_percent)/100)*total_time)
+        cutover_days = math.floor(cutover_weeks*7)
+
+        return {
+            "kt_session":kt_days,
+            "fwd_shadow":fwd_days,
+            "rev_shadow":rev_days,
+            "cutover":cutover_days
+        }
+
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
