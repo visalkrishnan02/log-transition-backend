@@ -319,233 +319,53 @@ async def startup():
 # User Routes
 
 catalog_data = [
-    {"catalog_name": "End-user Compute", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Service Desk", "is_vertical": False, "user_id": 1},
-    {"catalog_name": "Application Support", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Maintenance Services", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Security & Compliance", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Cloud Services", "is_vertical": False, "user_id": 1},
-    {"catalog_name": "Network Operations", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Database Management", "is_vertical": False, "user_id": 1}
+    {"catalog_name": "Event Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Incident Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Problem Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Change Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Release Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Assets and Configuration", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Knowledge Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Capacity Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Availability Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Service Level Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Continuous Service Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Demand Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Information Security", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Continuity Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Portfolio Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Financial Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Business Relationship", "is_vertical": True, "user_id": 1},
 ]
 
+
+
 subcatalog_data = [
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Access/Privilege Issues",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Helpdesk, administration and Super Users",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Ad-hoc reports (Queries)",
-        "service_level": "Level 2",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Device Configuration Assistance",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Peripheral Device Setup & Troubleshooting",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Incident Management",
-        "service_level": "Level 3",
-        "service_type_id": 2
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Service Request",
-        "service_level": "Level 3",
-        "service_type_id": 7
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Functional & Hierarchical Escalation",
-        "service_level": "Level 1",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Monitoring Communications & Reporting",
-        "service_level": "Level 1",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "First-line Technical Support",
-        "service_level": "Level 1",
-        "service_type_id": 2
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Data Issues analysis & fix",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Break-fix of issues without changing application code",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Triage of Issues/tickets",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Issues analysis and hot fix (no code change)",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Application Configuration",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Application Performance Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 4
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Error Log Analysis",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "DB Maintenance, Archiving and Housekeeping",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Application Level Housekeeping activities",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Maintenance of workflows",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Upgrades, Patches, & Configuration Management",
-        "service_level": "Level 2",
-        "service_type_id": 5
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Problem Management",
-        "service_level": "Level 3",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Change & Release Management",
-        "service_level": "Level 3",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Configuration Management",
-        "service_level": "Level 3",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "System Health Check",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 5,
-        "sub_catalog_name": "Security Incident Response",
-        "service_level": "Level 3",
-        "service_type_id": 2
-    },
-    {
-        "catalog_id": 5,
-        "sub_catalog_name": "Compliance Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 5,
-        "sub_catalog_name": "Vulnerability Assessment",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 6,
-        "sub_catalog_name": "Cloud Infrastructure Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 4
-    },
-    {
-        "catalog_id": 6,
-        "sub_catalog_name": "Cloud Application Support",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 6,
-        "sub_catalog_name": "Cloud Migration Assistance",
-        "service_level": "Level 3",
-        "service_type_id": 7
-    },
-    {
-        "catalog_id": 7,
-        "sub_catalog_name": "Network Health Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 4
-    },
-    {
-        "catalog_id": 7,
-        "sub_catalog_name": "Network Configuration",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 7,
-        "sub_catalog_name": "Network Security Assessment",
-        "service_level": "Level 3",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 8,
-        "sub_catalog_name": "Database Backup & Recovery",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 8,
-        "sub_catalog_name": "Database Performance Tuning",
-        "service_level": "Level 3",
-        "service_type_id": 4
-    }
+    {"catalog_id": 1, "sub_catalog_name": "Alert and Monitoring", "service_level": "Level 1", "service_type_id": 4},
+    {"catalog_id": 1, "sub_catalog_name": "User Support", "service_level": "Level 1", "service_type_id": 8},
+    {"catalog_id": 1, "sub_catalog_name": "Service Request", "service_level": "Level 2", "service_type_id": 7},
+    {"catalog_id": 1, "sub_catalog_name": "Production Support", "service_level": "Level 2", "service_type_id": 6},
+    {"catalog_id": 1, "sub_catalog_name": "Maintenance", "service_level": "Level 2", "service_type_id": 3},
+    {"catalog_id": 1, "sub_catalog_name": "Production Support", "service_level": "Level 3", "service_type_id": 6},
+    {"catalog_id": 1, "sub_catalog_name": "Problem Detection and Resolution", "service_level": "Level 3", "service_type_id": 2},
+    {"catalog_id": 1, "sub_catalog_name": "Change Request and Approval", "service_level": "Level 1", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Change Request and Approval", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Change Request and Approval", "service_level": "Level 3", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Release Planning and Deployment", "service_level": "Level 1", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Release Planning and Deployment", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Release Planning and Deployment", "service_level": "Level 3", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Configuration Identification & Control", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Knowledge Curation and Maintenance", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Manage resource utilization and performance", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Define and monitor availability requirements", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Define and Manage Service Levels", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Perform Service Improvement", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Forecast Service Demand", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Manage Security Risk", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Ensure Service Continuity and Recovery", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Manage Service Portfolio", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Manage IT Financial Resources", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Maintain Business Partnerships", "service_level": "Level 2", "service_type_id": 1},
 ]
 
 ###############
