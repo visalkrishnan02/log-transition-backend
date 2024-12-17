@@ -241,7 +241,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 async def init_catalog_and_data(db: Session):
 
     existing_service_types = db.query(ServiceType).first()
-    
+
     if not existing_service_types:
         service_type_data = [
             {"service_type_name": "Governance", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
@@ -289,8 +289,6 @@ catalog_data = [
     {"catalog_name": "Business Relationship", "is_vertical": True, "user_id": 1},
 ]
 
-
-
 subcatalog_data = [
     {"catalog_id": 1, "sub_catalog_name": "Alert and Monitoring", "service_level": "Level 1", "service_type_id": 4},
     {"catalog_id": 1, "sub_catalog_name": "User Support", "service_level": "Level 1", "service_type_id": 8},
@@ -324,10 +322,7 @@ subcatalog_data = [
 ###############
 
 @router.post("/users/{user_id}/add_catalog", response_model=List[CatalogResponse])
-async def create_catalogs_for_user(
-    user_id: int, 
-    db: Session = Depends(get_db)
-):
+async def create_catalogs_for_user(user_id: int, db: Session = Depends(get_db)):
     # Validate user exists
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -357,9 +352,7 @@ async def create_catalogs_for_user(
         raise HTTPException(status_code=400, detail=f"Error creating catalogs: {str(e)}") 
 
 @router.post("/users/add_subcatalog", response_model=List[SubCatalogResponse])
-async def create_subcatalogs_for_catalog(
-    db: Session = Depends(get_db)
-):
+async def create_subcatalogs_for_catalog(db: Session = Depends(get_db)):
     # Validate service types exist
     for subcatalog in subcatalog_data:
         service_type = db.query(ServiceType).filter(ServiceType.id == subcatalog['service_type_id']).first()
@@ -460,9 +453,11 @@ async def create_service_type(service_type: ServiceTypeCreate, db: Session = Dep
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating service type: {str(e)}")
 
+from sqlalchemy import distinct
+
 @router.get("/service-types", response_model=List[ServiceTypeResponse])
 async def get_all_service_types(db: Session = Depends(get_db)):
-    service_types = db.query(ServiceType).all()
+    service_types = (db.query(ServiceType).distinct(ServiceType.service_type_name).all())
     if not service_types:
         raise HTTPException(status_code=404, detail="No service types found")
     return service_types
@@ -867,88 +862,6 @@ def delete_topic_risk(risk_id: int, db: Session = Depends(get_db)):
 #####################
 # Timeline Generation
 #####################
-
-@router.get("/timeline-test/{subcatalog_id}/{event_type}", response_model=dict)
-def get_subcatalog_topics_by_event_type(subcatalog_id: int, event_type: str, db: Session = Depends(get_db)):
-
-    valid_event_types = ['kt_session', 'fwd_shadow', 'rev_shadow', 'cutover']
-    if event_type not in valid_event_types:
-        raise HTTPException(status_code=400, detail=f"Invalid event type. Must be one of {valid_event_types}")
-    
-    subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
-    if not subcatalog:
-        raise HTTPException(status_code=404, detail="Subcatalog not found")
-    
-    service_type = db.query(ServiceType).filter(ServiceType.id == subcatalog.service_type_id).first()
-    if not service_type:
-        raise HTTPException(status_code=404, detail="Service Type not found")
-    
-    topics = db.query(Topic).filter(Topic.subcatalog_id == subcatalog_id).all()
-
-    topic_summary = ""
-    for topic in topics:
-        topic_summary += f"The topic name is {topic.name}. "
-        topic_summary += f"The topic description is {topic.description}. "
-    
-    sub_catalog_name = subcatalog.sub_catalog_name
-
-    time_percent = getattr(service_type, event_type)
-
-    try:
-        model = AzureChatOpenAI(model="gpt-4o", api_version='2024-02-15-preview')
-        prompt_template = ChatPromptTemplate.from_messages(
-            [
-                ("system", "You are an expert analyst specializing in evaluating services and their associated tasks."),
-                (
-                    "human", 
-                    (
-                        "Given is the service name, {sub_catalog_name} and task summary of this service, {topic_summary}.\n"
-                        "By considering this 2 datas alone, calculate the number of days required to complete the tasks associated with this service.\n"
-                        "The maximum total time you can take is 10 days. Choose the appropriate total time. \n"
-                        "From the total required days obtained, the event called {event_type} takes {time_percent} percentage of the total time.\n"
-                        "Return me the days required for that event_type in number, example: 12. Dont add unwanted sentence, just return the integer only."
-                    )
-                ),
-            ]
-        )
-
-        def analyze_timeline(features):
-            timeline_template = ChatPromptTemplate.from_messages(
-                [
-                    ("system", "You are an expert in finding out the minimum number of days to complete a set of tasks."),
-                    (
-                        "human",
-                        "Given these features: {features}, return the required days in numbers, example: 12. Dont add unwanted sentence, just return the integer only.",
-                    ),
-                ]
-            )
-            return timeline_template.format_prompt(features=features)
-
-    
-        timeline_chain = (
-            RunnableLambda(lambda x: analyze_timeline(x)) | model | StrOutputParser()
-        )
-        
-        def combine_reponse(timeline):
-            result = {
-            "timeline": timeline
-            }
-            # Return the dictionary as a JSON response
-            return JSONResponse(result)
-
-        chain = (
-            prompt_template
-            | model
-            | StrOutputParser()
-            | RunnableParallel(branches={"timeline": timeline_chain})
-            | RunnableLambda(lambda x: combine_reponse(x["branches"]["timeline"]))
-        )
-
-        result = chain.invoke({"sub_catalog_name": sub_catalog_name, "topic_summary": topic_summary,"event_type":event_type, "time_percent": time_percent})
-        return result
-
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/timeline/{subcatalog_id}", response_model=dict)
 def get_subcatalog_topics_by_event_type(subcatalog_id: int, db: Session = Depends(get_db)):
