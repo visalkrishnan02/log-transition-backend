@@ -239,70 +239,21 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     )
 
 async def init_catalog_and_data(db: Session):
-    # Check if service types exist
+
     existing_service_types = db.query(ServiceType).first()
+    
     if not existing_service_types:
- 
         service_type_data = [
-            {
-                "service_type_name": "Governance",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Incident",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Maintenance",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Monitoring",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Operation Support",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Production Support",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Service Request",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "User Support",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            }
+            {"service_type_name": "Governance", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Incident", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Maintenance", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Monitoring", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Operation Support", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Production Support", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Service Request", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "User Support", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"}
         ]
 
-        # Add service types
         service_types_to_add = [ServiceType(**service_type) for service_type in service_type_data]
         db.add_all(service_types_to_add)
         db.commit()
