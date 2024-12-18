@@ -13,6 +13,12 @@ from app.services.service_analysis import analyze_service_tasks
 
 from fastapi import APIRouter
 from typing import List, Optional
+import math
+
+from langchain_openai import AzureChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.runnable import RunnableParallel, RunnableLambda
+from langchain.schema.output_parser import StrOutputParser
 
 router = APIRouter()
 
@@ -31,9 +37,10 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    is_admin = Column(Boolean, default=False, nullable=False)
     
     # Relationships
-    catalogs = relationship("Catalog", back_populates="user")
+    catalogs = relationship("Catalog", back_populates="user", cascade="all, delete-orphan")
 
 class Catalog(Base):
     __tablename__ = "catalogs"
@@ -44,7 +51,7 @@ class Catalog(Base):
     
     # Relationships
     user = relationship("User", back_populates="catalogs")
-    subcatalogs = relationship("SubCatalog", back_populates="catalog")
+    subcatalogs = relationship("SubCatalog", back_populates="catalog", cascade="all, delete-orphan")
 
 class ServiceType(Base):
     __tablename__ = "service_types"
@@ -61,7 +68,7 @@ class ServiceType(Base):
 class SubCatalog(Base):
     __tablename__ = "subcatalogs"
     id = Column(Integer, primary_key=True, index=True)
-    catalog_id = Column(Integer, ForeignKey('catalogs.id'), nullable=False)
+    catalog_id = Column(Integer, ForeignKey('catalogs.id', ondelete='CASCADE'), nullable=False)
     service_type_id = Column(Integer, ForeignKey('service_types.id'), nullable=False)
     sub_catalog_name = Column(String(255), nullable=False)
     service_level = Column(String(50), nullable=False)
@@ -69,25 +76,25 @@ class SubCatalog(Base):
     # Relationships
     catalog = relationship("Catalog", back_populates="subcatalogs")
     service_type = relationship("ServiceType", back_populates="subcatalogs")
-    topics = relationship("Topic", back_populates="subcatalog")
-    risks = relationship("SubCatalogRisk", back_populates="subcatalog")
+    topics = relationship("Topic", back_populates="subcatalog", cascade="all, delete-orphan")
+    risks = relationship("SubCatalogRisk", back_populates="subcatalog", cascade="all, delete-orphan")
 
 class Topic(Base):
     __tablename__ = "topics"
     id = Column(Integer, primary_key=True, index=True)
-    subcatalog_id = Column(Integer, ForeignKey('subcatalogs.id'), nullable=False)
+    subcatalog_id = Column(Integer, ForeignKey('subcatalogs.id', ondelete='CASCADE'), nullable=False)
     name = Column(String(255), nullable=False)
     description = Column(String(500), nullable=True)
     
     # Relationships
     subcatalog = relationship("SubCatalog", back_populates="topics")
-    risks = relationship("TopicRisk", back_populates="topic")
+    risks = relationship("TopicRisk", back_populates="topic", cascade="all, delete-orphan")
 
 class SubCatalogRisk(Base):
     __tablename__ = "subcatalog_risks"
     
     id = Column(Integer, primary_key=True, index=True)  # Unique primary key
-    sub_catalog_id = Column(Integer, ForeignKey('subcatalogs.id'), nullable=False)
+    sub_catalog_id = Column(Integer, ForeignKey('subcatalogs.id', ondelete='CASCADE'), nullable=False)
     risk = Column(String(500), nullable=True)
     status = Column(String(100), nullable=True)
     
@@ -98,7 +105,7 @@ class TopicRisk(Base):
     __tablename__ = "topic_risks"
     
     id = Column(Integer, primary_key=True, index=True)  # Unique primary key
-    topic_id = Column(Integer, ForeignKey('topics.id'), nullable=False)
+    topic_id = Column(Integer, ForeignKey('topics.id', ondelete='CASCADE'), nullable=False)
     risk = Column(String(500), nullable=True)
     status = Column(String(100), nullable=True)
     
@@ -124,6 +131,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     created_at: datetime
+    is_admin: bool
 
     class Config:
         from_attributes = True
@@ -210,6 +218,9 @@ class TopicRiskResponse(TopicRiskCreate):
     class Config:
         from_attributes = True
 
+class TimelineRequest(BaseModel):
+    subcatalog_ids: List[int]
+
 # Database dependency
 def get_db():
     db = SessionLocal()
@@ -231,70 +242,21 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     )
 
 async def init_catalog_and_data(db: Session):
-    # Check if service types exist
+
     existing_service_types = db.query(ServiceType).first()
+
     if not existing_service_types:
- 
         service_type_data = [
-            {
-                "service_type_name": "Governance",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Incident",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Maintenance",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Monitoring",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Operation Support",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Production Support",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "Service Request",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            },
-            {
-                "service_type_name": "User Support",
-                "kt_session": "30",
-                "fwd_shadow": "30",
-                "rev_shadow": "30",
-                "cutover": "10"
-            }
+            {"service_type_name": "Governance", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Incident", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Maintenance", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Monitoring", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Operation Support", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Production Support", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "Service Request", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"},
+            {"service_type_name": "User Support", "kt_session": "30", "fwd_shadow": "30", "rev_shadow": "30", "cutover": "10"}
         ]
 
-        # Add service types
         service_types_to_add = [ServiceType(**service_type) for service_type in service_type_data]
         db.add_all(service_types_to_add)
         db.commit()
@@ -311,233 +273,51 @@ async def startup():
 # User Routes
 
 catalog_data = [
-    {"catalog_name": "End-user Compute", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Service Desk", "is_vertical": False, "user_id": 1},
-    {"catalog_name": "Application Support", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Maintenance Services", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Security & Compliance", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Cloud Services", "is_vertical": False, "user_id": 1},
-    {"catalog_name": "Network Operations", "is_vertical": True, "user_id": 1},
-    {"catalog_name": "Database Management", "is_vertical": False, "user_id": 1}
+    {"catalog_name": "Event Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Incident Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Problem Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Change Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Release Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Assets and Configuration", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Knowledge Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Capacity Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Availability Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Service Level Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Continuous Service Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Demand Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Information Security", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Continuity Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Portfolio Management", "is_vertical": True, "user_id": 1},
+    {"catalog_name": "Financial Management", "is_vertical": False, "user_id": 1},
+    {"catalog_name": "Business Relationship", "is_vertical": True, "user_id": 1},
 ]
 
 subcatalog_data = [
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Access/Privilege Issues",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Helpdesk, administration and Super Users",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Ad-hoc reports (Queries)",
-        "service_level": "Level 2",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Device Configuration Assistance",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 1,
-        "sub_catalog_name": "Peripheral Device Setup & Troubleshooting",
-        "service_level": "Level 1",
-        "service_type_id": 8
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Incident Management",
-        "service_level": "Level 3",
-        "service_type_id": 2
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Service Request",
-        "service_level": "Level 3",
-        "service_type_id": 7
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Functional & Hierarchical Escalation",
-        "service_level": "Level 1",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "Monitoring Communications & Reporting",
-        "service_level": "Level 1",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 2,
-        "sub_catalog_name": "First-line Technical Support",
-        "service_level": "Level 1",
-        "service_type_id": 2
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Data Issues analysis & fix",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Break-fix of issues without changing application code",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Triage of Issues/tickets",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Issues analysis and hot fix (no code change)",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Application Configuration",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Application Performance Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 4
-    },
-    {
-        "catalog_id": 3,
-        "sub_catalog_name": "Error Log Analysis",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "DB Maintenance, Archiving and Housekeeping",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Application Level Housekeeping activities",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Maintenance of workflows",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Upgrades, Patches, & Configuration Management",
-        "service_level": "Level 2",
-        "service_type_id": 5
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Problem Management",
-        "service_level": "Level 3",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Change & Release Management",
-        "service_level": "Level 3",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "Configuration Management",
-        "service_level": "Level 3",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 4,
-        "sub_catalog_name": "System Health Check",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 5,
-        "sub_catalog_name": "Security Incident Response",
-        "service_level": "Level 3",
-        "service_type_id": 2
-    },
-    {
-        "catalog_id": 5,
-        "sub_catalog_name": "Compliance Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 5,
-        "sub_catalog_name": "Vulnerability Assessment",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 6,
-        "sub_catalog_name": "Cloud Infrastructure Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 4
-    },
-    {
-        "catalog_id": 6,
-        "sub_catalog_name": "Cloud Application Support",
-        "service_level": "Level 2",
-        "service_type_id": 6
-    },
-    {
-        "catalog_id": 6,
-        "sub_catalog_name": "Cloud Migration Assistance",
-        "service_level": "Level 3",
-        "service_type_id": 7
-    },
-    {
-        "catalog_id": 7,
-        "sub_catalog_name": "Network Health Monitoring",
-        "service_level": "Level 2",
-        "service_type_id": 4
-    },
-    {
-        "catalog_id": 7,
-        "sub_catalog_name": "Network Configuration",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 7,
-        "sub_catalog_name": "Network Security Assessment",
-        "service_level": "Level 3",
-        "service_type_id": 1
-    },
-    {
-        "catalog_id": 8,
-        "sub_catalog_name": "Database Backup & Recovery",
-        "service_level": "Level 2",
-        "service_type_id": 3
-    },
-    {
-        "catalog_id": 8,
-        "sub_catalog_name": "Database Performance Tuning",
-        "service_level": "Level 3",
-        "service_type_id": 4
-    }
+    {"catalog_id": 1, "sub_catalog_name": "Alert and Monitoring", "service_level": "Level 1", "service_type_id": 4},
+    {"catalog_id": 1, "sub_catalog_name": "User Support", "service_level": "Level 1", "service_type_id": 8},
+    {"catalog_id": 1, "sub_catalog_name": "Service Request", "service_level": "Level 2", "service_type_id": 7},
+    {"catalog_id": 1, "sub_catalog_name": "Production Support", "service_level": "Level 2", "service_type_id": 6},
+    {"catalog_id": 1, "sub_catalog_name": "Maintenance", "service_level": "Level 2", "service_type_id": 3},
+    {"catalog_id": 1, "sub_catalog_name": "Production Support", "service_level": "Level 3", "service_type_id": 6},
+    {"catalog_id": 1, "sub_catalog_name": "Problem Detection and Resolution", "service_level": "Level 3", "service_type_id": 2},
+    {"catalog_id": 1, "sub_catalog_name": "Change Request and Approval", "service_level": "Level 1", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Change Request and Approval", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Change Request and Approval", "service_level": "Level 3", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Release Planning and Deployment", "service_level": "Level 1", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Release Planning and Deployment", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Release Planning and Deployment", "service_level": "Level 3", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Configuration Identification & Control", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Knowledge Curation and Maintenance", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Manage resource utilization and performance", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Define and monitor availability requirements", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Define and Manage Service Levels", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Perform Service Improvement", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Forecast Service Demand", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Manage Security Risk", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Ensure Service Continuity and Recovery", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Manage Service Portfolio", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Manage IT Financial Resources", "service_level": "Level 2", "service_type_id": 1},
+    {"catalog_id": 1, "sub_catalog_name": "Maintain Business Partnerships", "service_level": "Level 2", "service_type_id": 1},
 ]
 
 ###############
@@ -545,10 +325,7 @@ subcatalog_data = [
 ###############
 
 @router.post("/users/{user_id}/add_catalog", response_model=List[CatalogResponse])
-async def create_catalogs_for_user(
-    user_id: int, 
-    db: Session = Depends(get_db)
-):
+async def create_catalogs_for_user(user_id: int, db: Session = Depends(get_db)):
     # Validate user exists
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -578,9 +355,7 @@ async def create_catalogs_for_user(
         raise HTTPException(status_code=400, detail=f"Error creating catalogs: {str(e)}") 
 
 @router.post("/users/add_subcatalog", response_model=List[SubCatalogResponse])
-async def create_subcatalogs_for_catalog(
-    db: Session = Depends(get_db)
-):
+async def create_subcatalogs_for_catalog(db: Session = Depends(get_db)):
     # Validate service types exist
     for subcatalog in subcatalog_data:
         service_type = db.query(ServiceType).filter(ServiceType.id == subcatalog['service_type_id']).first()
@@ -620,19 +395,20 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     # Validate passwords match
     if user.password != user.confirmPassword:
         raise HTTPException(status_code=400, detail="Passwords do not match")
-    
+   
     # Check if email exists
     if db.query(User).filter(User.email == user.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+   
     # Create new user
     hashed_password = hash_password(user.password)
     db_user = User(
         name=user.name,
         email=user.email,
-        password=hashed_password
+        password=hashed_password,
+        # is_admin=False  # Explicitly set to False
     )
-    
+   
     try:
         db.add(db_user)
         db.commit()
@@ -664,16 +440,6 @@ async def get_user(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
-#Catalog Routes
-@router.get("/catalog/by-id/{catalog_id}", response_model=List[CatalogResponse])
-async def get_catalog_by_id(catalog_id: int, db: Session = Depends(get_db)):
-    catalogs = db.query(Catalog).filter(Catalog.id == catalog_id).all()
-    
-    if not catalogs:
-        raise HTTPException(status_code=404, detail="No catalog found with the given ID")
-    
-    return catalogs
-
 #####################
 # Service Type Routes
 #####################
@@ -690,9 +456,11 @@ async def create_service_type(service_type: ServiceTypeCreate, db: Session = Dep
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating service type: {str(e)}")
 
+from sqlalchemy import distinct
+
 @router.get("/service-types", response_model=List[ServiceTypeResponse])
 async def get_all_service_types(db: Session = Depends(get_db)):
-    service_types = db.query(ServiceType).all()
+    service_types = (db.query(ServiceType).distinct(ServiceType.service_type_name).all())
     if not service_types:
         raise HTTPException(status_code=404, detail="No service types found")
     return service_types
@@ -705,11 +473,7 @@ async def get_service_type(service_type_id: int, db: Session = Depends(get_db)):
     return service_type
 
 @router.put("/service-type/user/{service_type_id}", response_model=ServiceTypeResponse)
-async def update_service_type_name(
-    service_type_id: int, 
-    service_type: ServiceTypeCreate, 
-    db: Session = Depends(get_db)
-):
+async def update_service_type_name(service_type_id: int, service_type: ServiceTypeCreate, db: Session = Depends(get_db)):
     db_service_type = db.query(ServiceType).filter(ServiceType.id == service_type_id).first()
     if not db_service_type:
         raise HTTPException(status_code=404, detail="Service type not found")
@@ -784,29 +548,23 @@ async def get_user_catalogs(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     
     catalogs = db.query(Catalog).filter(Catalog.user_id == user_id).all()
-    if not catalogs:
-        raise HTTPException(status_code=404, detail="No catalogs found for this user")
+    # if not catalogs:
+    #     raise HTTPException(status_code=404, detail="No catalogs found for this user")
     
     return catalogs
 
-@router.get("/user/{user_id}/catalog/{catalog_id}", response_model=CatalogResponse)
-async def get_specific_catalog(user_id: int, catalog_id: int, db: Session = Depends(get_db)):
-    db_catalog = db.query(Catalog).filter(
-        Catalog.id == catalog_id, 
-        Catalog.user_id == user_id
-    ).first()
+@router.get("/catalog/{catalog_id}", response_model=CatalogResponse)
+async def get_specific_catalog(catalog_id: int, db: Session = Depends(get_db)):
+    db_catalog = db.query(Catalog).filter(Catalog.id == catalog_id).first()
     
     if not db_catalog:
         raise HTTPException(status_code=404, detail="Catalog not found")
     
     return db_catalog
 
-@router.put("/user/{user_id}/catalog/{catalog_id}", response_model=CatalogResponse)
-async def update_catalog(user_id: int, catalog_id: int, catalog: CatalogCreate, db: Session = Depends(get_db)):
-    db_catalog = db.query(Catalog).filter(
-        Catalog.id == catalog_id, 
-        Catalog.user_id == user_id
-    ).first()
+@router.put("/catalog/{catalog_id}", response_model=CatalogResponse)
+async def update_catalog(catalog_id: int, catalog: CatalogCreate, db: Session = Depends(get_db)):
+    db_catalog = db.query(Catalog).filter(Catalog.id == catalog_id).first()
     
     if not db_catalog:
         raise HTTPException(status_code=404, detail="Catalog not found")
@@ -822,12 +580,9 @@ async def update_catalog(user_id: int, catalog_id: int, catalog: CatalogCreate, 
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating catalog: {str(e)}")
 
-@router.delete("/user/{user_id}/catalog/{catalog_id}")
-async def delete_catalog(user_id: int, catalog_id: int, db: Session = Depends(get_db)):
-    db_catalog = db.query(Catalog).filter(
-        Catalog.id == catalog_id, 
-        Catalog.user_id == user_id
-    ).first()
+@router.delete("/catalog/{catalog_id}")
+async def delete_catalog(catalog_id: int, db: Session = Depends(get_db)):
+    db_catalog = db.query(Catalog).filter(Catalog.id == catalog_id).first()
     
     if not db_catalog:
         raise HTTPException(status_code=404, detail="Catalog not found")
@@ -878,24 +633,18 @@ async def get_catalog_subcatalogs(catalog_id: int, db: Session = Depends(get_db)
     
     return subcatalogs
 
-@router.get("/catalog/{catalog_id}/subcatalog/{subcatalog_id}", response_model=SubCatalogResponse)
-async def get_specific_subcatalog(catalog_id: int, subcatalog_id: int, db: Session = Depends(get_db)):
-    db_subcatalog = db.query(SubCatalog).filter(
-        SubCatalog.id == subcatalog_id, 
-        SubCatalog.catalog_id == catalog_id
-    ).first()
+@router.get("/subcatalog/{subcatalog_id}", response_model=SubCatalogResponse)
+async def get_specific_subcatalog(subcatalog_id: int, db: Session = Depends(get_db)):
+    db_subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
     
     if not db_subcatalog:
         raise HTTPException(status_code=404, detail="Subcatalog not found")
     
     return db_subcatalog
 
-@router.put("/catalog/{catalog_id}/subcatalog/{subcatalog_id}", response_model=SubCatalogResponse)
-async def update_subcatalog(catalog_id: int, subcatalog_id: int, subcatalog: SubCatalogCreate, db: Session = Depends(get_db)):
-    db_subcatalog = db.query(SubCatalog).filter(
-        SubCatalog.id == subcatalog_id, 
-        SubCatalog.catalog_id == catalog_id
-    ).first()
+@router.put("/subcatalog/{subcatalog_id}", response_model=SubCatalogResponse)
+async def update_subcatalog(subcatalog_id: int, subcatalog: SubCatalogCreate, db: Session = Depends(get_db)):
+    db_subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
     
     if not db_subcatalog:
         raise HTTPException(status_code=404, detail="Subcatalog not found")
@@ -911,12 +660,9 @@ async def update_subcatalog(catalog_id: int, subcatalog_id: int, subcatalog: Sub
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating subcatalog: {str(e)}")
 
-@router.delete("/catalog/{catalog_id}/subcatalog/{subcatalog_id}")
-async def delete_subcatalog(catalog_id: int, subcatalog_id: int, db: Session = Depends(get_db)):
-    db_subcatalog = db.query(SubCatalog).filter(
-        SubCatalog.id == subcatalog_id, 
-        SubCatalog.catalog_id == catalog_id
-    ).first()
+@router.delete("/subcatalog/{subcatalog_id}")
+async def delete_subcatalog(subcatalog_id: int, db: Session = Depends(get_db)):
+    db_subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
     
     if not db_subcatalog:
         raise HTTPException(status_code=404, detail="Subcatalog not found")
@@ -962,24 +708,18 @@ async def get_subcatalog_topics(subcatalog_id: int, db: Session = Depends(get_db
     
     return topics
 
-@router.get("/subcatalog/{subcatalog_id}/topic/{topic_id}", response_model=TopicResponse)
-async def get_specific_topic(subcatalog_id: int, topic_id: int, db: Session = Depends(get_db)):
-    db_topic = db.query(Topic).filter(
-        Topic.id == topic_id, 
-        Topic.subcatalog_id == subcatalog_id
-    ).first()
+@router.get("/topic/{topic_id}", response_model=TopicResponse)
+async def get_specific_topic(topic_id: int, db: Session = Depends(get_db)):
+    db_topic = db.query(Topic).filter(Topic.id == topic_id).first()
     
     if not db_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     
     return db_topic
 
-@router.put("/subcatalog/{subcatalog_id}/topic/{topic_id}", response_model=TopicResponse)
-async def update_topic(subcatalog_id: int, topic_id: int, topic: TopicCreate, db: Session = Depends(get_db)):
-    db_topic = db.query(Topic).filter(
-        Topic.id == topic_id, 
-        Topic.subcatalog_id == subcatalog_id
-    ).first()
+@router.put("/topic/{topic_id}", response_model=TopicResponse)
+async def update_topic(topic_id: int, topic: TopicCreate, db: Session = Depends(get_db)):
+    db_topic = db.query(Topic).filter(Topic.id == topic_id).first()
     
     if not db_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -995,12 +735,9 @@ async def update_topic(subcatalog_id: int, topic_id: int, topic: TopicCreate, db
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating topic: {str(e)}")
 
-@router.delete("/subcatalog/{subcatalog_id}/topic/{topic_id}")
-async def delete_topic(subcatalog_id: int, topic_id: int, db: Session = Depends(get_db)):
-    db_topic = db.query(Topic).filter(
-        Topic.id == topic_id, 
-        Topic.subcatalog_id == subcatalog_id
-    ).first()
+@router.delete("/topic/{topic_id}")
+async def delete_topic(topic_id: int, db: Session = Depends(get_db)):
+    db_topic = db.query(Topic).filter(Topic.id == topic_id).first()
     
     if not db_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -1016,11 +753,8 @@ async def delete_topic(subcatalog_id: int, topic_id: int, db: Session = Depends(
 ########################
 # SUBCATALOG RISK ROUTES
 ########################
-@router.post("/subcatalog-risks/", response_model=SubCatalogRiskResponse)
-def create_subcatalog_risk(
-    subcatalog_risk: SubCatalogRiskCreate, 
-    db: Session = Depends(get_db)
-):
+@router.post("/subcatalog-risks", response_model=SubCatalogRiskResponse)
+def create_subcatalog_risk(subcatalog_risk: SubCatalogRiskCreate, db: Session = Depends(get_db)):
     # Check if subcatalog exists
     existing_subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_risk.sub_catalog_id).first()
     if not existing_subcatalog:
@@ -1033,35 +767,20 @@ def create_subcatalog_risk(
     db.refresh(db_subcatalog_risk)
     return db_subcatalog_risk
 
-@router.get("/subcatalog-risks/", response_model=List[SubCatalogRiskResponse])
-def read_subcatalog_risks(db: Session = Depends(get_db)):
-    subcatalog_risks = db.query(SubCatalogRisk).all()
+@router.get("/subcatalog/{sub_catalog_id}/subcatalog-risks", response_model=List[SubCatalogRiskResponse])
+def read_subcatalog_risks_by_subcatalog(sub_catalog_id: int, db: Session = Depends(get_db)):
+    subcatalog_risks = db.query(SubCatalogRisk).filter(SubCatalogRisk.sub_catalog_id == sub_catalog_id).all()
     return subcatalog_risks
 
 @router.get("/subcatalog-risks/{risk_id}", response_model=SubCatalogRiskResponse)
-def read_subcatalog_risk(
-    risk_id: int, 
-    db: Session = Depends(get_db)
-):
+def read_subcatalog_risk(risk_id: int, db: Session = Depends(get_db)):
     subcatalog_risk = db.query(SubCatalogRisk).filter(SubCatalogRisk.id == risk_id).first()
     if not subcatalog_risk:
         raise HTTPException(status_code=404, detail="Subcatalog risk not found")
     return subcatalog_risk
 
-@router.get("/subcatalog-risks/by-subcatalog/{sub_catalog_id}", response_model=List[SubCatalogRiskResponse])
-def read_subcatalog_risks_by_subcatalog(
-    sub_catalog_id: int, 
-    db: Session = Depends(get_db)
-):
-    subcatalog_risks = db.query(SubCatalogRisk).filter(SubCatalogRisk.sub_catalog_id == sub_catalog_id).all()
-    return subcatalog_risks
-
 @router.put("/subcatalog-risks/{risk_id}", response_model=SubCatalogRiskResponse)
-def update_subcatalog_risk(
-    risk_id: int, 
-    subcatalog_risk: SubCatalogRiskCreate, 
-    db: Session = Depends(get_db)
-):
+def update_subcatalog_risk(risk_id: int, subcatalog_risk: SubCatalogRiskCreate, db: Session = Depends(get_db)):
     # Find existing risk
     db_subcatalog_risk = db.query(SubCatalogRisk).filter(SubCatalogRisk.id == risk_id).first()
     if not db_subcatalog_risk:
@@ -1076,10 +795,7 @@ def update_subcatalog_risk(
     return db_subcatalog_risk
 
 @router.delete("/subcatalog-risks/{risk_id}")
-def delete_subcatalog_risk(
-    risk_id: int, 
-    db: Session = Depends(get_db)
-):
+def delete_subcatalog_risk(risk_id: int, db: Session = Depends(get_db)):
     # Find existing risk
     db_subcatalog_risk = db.query(SubCatalogRisk).filter(SubCatalogRisk.id == risk_id).first()
     if not db_subcatalog_risk:
@@ -1092,11 +808,8 @@ def delete_subcatalog_risk(
 # TOPIC RISK ROUTES
 ###################
 
-@router.post("/topic-risks/", response_model=TopicRiskResponse)
-def create_topic_risk(
-    topic_risk: TopicRiskCreate, 
-    db: Session = Depends(get_db)
-):
+@router.post("/topic-risks", response_model=TopicRiskResponse)
+def create_topic_risk(topic_risk: TopicRiskCreate, db: Session = Depends(get_db)):
     # Check if topic exists
     existing_topic = db.query(Topic).filter(Topic.id == topic_risk.topic_id).first()
     if not existing_topic:
@@ -1109,35 +822,20 @@ def create_topic_risk(
     db.refresh(db_topic_risk)
     return db_topic_risk
 
-@router.get("/topic-risks/", response_model=List[TopicRiskResponse])
-def read_topic_risks(db: Session = Depends(get_db)):
-    topic_risks = db.query(TopicRisk).all()
+@router.get("/topic/{topic_id}/topic-risks", response_model=List[TopicRiskResponse])
+def read_topic_risks_by_topic(topic_id: int, db: Session = Depends(get_db)):
+    topic_risks = db.query(TopicRisk).filter(TopicRisk.topic_id == topic_id).all()
     return topic_risks
 
 @router.get("/topic-risks/{risk_id}", response_model=TopicRiskResponse)
-def read_topic_risk(
-    risk_id: int, 
-    db: Session = Depends(get_db)
-):
+def read_topic_risk(risk_id: int, db: Session = Depends(get_db)):
     topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
     if not topic_risk:
         raise HTTPException(status_code=404, detail="Topic risk not found")
     return topic_risk
 
-@router.get("/topic-risks/by-topic/{topic_id}", response_model=List[TopicRiskResponse])
-def read_topic_risks_by_topic(
-    topic_id: int, 
-    db: Session = Depends(get_db)
-):
-    topic_risks = db.query(TopicRisk).filter(TopicRisk.topic_id == topic_id).all()
-    return topic_risks
-
 @router.put("/topic-risks/{risk_id}", response_model=TopicRiskResponse)
-def update_topic_risk(
-    risk_id: int, 
-    topic_risk: TopicRiskCreate, 
-    db: Session = Depends(get_db)
-):
+def update_topic_risk(risk_id: int, topic_risk: TopicRiskCreate, db: Session = Depends(get_db)):
     # Find existing risk
     db_topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
     if not db_topic_risk:
@@ -1152,15 +850,179 @@ def update_topic_risk(
     return db_topic_risk
 
 @router.delete("/topic-risks/{risk_id}")
-def delete_topic_risk(
-    risk_id: int, 
-    db: Session = Depends(get_db)
-):
+def delete_topic_risk(risk_id: int, db: Session = Depends(get_db)):
+
     # Find existing risk
     db_topic_risk = db.query(TopicRisk).filter(TopicRisk.id == risk_id).first()
+
     if not db_topic_risk:
         raise HTTPException(status_code=404, detail="Topic risk not found")
     
     db.delete(db_topic_risk)
     db.commit()
     return {"detail": "Topic risk deleted successfully"}
+
+#####################
+# Timeline Generation
+#####################
+
+@router.post("/timeline", response_model=dict) #request body: { "subcatalog_ids" : [1,2,3]}
+def get_subcatalogs_timeline(request: TimelineRequest, db: Session = Depends(get_db)):
+
+    subcatalog_ids = request.subcatalog_ids
+
+    if not subcatalog_ids:
+        raise HTTPException(status_code=400, detail="No subcatalog IDs provided")
+
+    service_type_groups = {}
+    
+    for subcatalog_id in subcatalog_ids:
+
+        subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
+        if not subcatalog:
+            raise HTTPException(status_code=404, detail=f"Subcatalog with ID {subcatalog_id} not found")
+        
+        service_type = db.query(ServiceType).filter(ServiceType.id == subcatalog.service_type_id).first()
+        if not service_type:
+            raise HTTPException(status_code=404, detail=f"Service Type for subcatalog {subcatalog_id} not found")
+        
+        if service_type.service_type_name not in service_type_groups:
+            service_type_groups[service_type.service_type_name] = {
+                'service_type': service_type,
+                'subcatalogs': [],
+                'topics': []
+            }
+        
+        service_type_groups[service_type.service_type_name]['subcatalogs'].append(subcatalog)
+
+    for service_type_name, group in service_type_groups.items():
+
+        topics = []
+        for subcatalog in group['subcatalogs']:
+            subcatalog_topics = db.query(Topic).filter(Topic.subcatalog_id == subcatalog.id).all()
+            topics.extend(subcatalog_topics)
+        
+        group['topics'] = topics
+
+    # Prepare results
+    results = {}
+    
+    try:
+        model = AzureChatOpenAI(model="gpt-4o", api_version='2024-02-15-preview')
+        
+        # Prompt template for analysis
+        prompt_template = ChatPromptTemplate.from_messages(
+            [
+                ("system", "You are an expert analyst specializing in evaluating services and their associated tasks."),
+                (
+                    "human", 
+                    (
+                        "Given is the service name, {service_type_name} and task summary of this service, {topic_summary}.\n"
+                        "Given the following details about the service and its tasks, analyze and provide the following:\n"
+                        "1. The criticality of the service and its tasks. Explain why they are critical or not.\n"
+                        "2. The complexity of the tasks, considering the processes, dependencies, and technical requirements.\n"
+                    )
+                ),
+            ]
+        )  
+
+        def analyze_criticality(features):
+            criticality_template = ChatPromptTemplate.from_messages(
+                [
+                    ("system", "You are an expert in finding out the criticality."),
+                    (
+                        "human",
+                        "Given these features: {features}, return the criticality in strictly single word, either low/high. Eg. High",
+                    ),
+                ]
+            )
+            return criticality_template.format_prompt(features=features)
+
+        def analyze_complexity(features):
+            complexity_template = ChatPromptTemplate.from_messages(
+                [
+                    ("system", "You are an expert in finding out the complexity."),
+                    (
+                        "human",
+                        "Given these features: {features}, return the complexity in strictly single word. either low/high. Eg. Low",
+                    ),
+                ]
+            )
+            return complexity_template.format_prompt(features=features)
+
+        # Simplify branches with LCEL
+        criticality_chain = (
+            RunnableLambda(lambda x: analyze_criticality(x)) | model | StrOutputParser()
+        )
+
+        complexity_chain = (
+            RunnableLambda(lambda x: analyze_complexity(x)) | model | StrOutputParser()
+        )
+
+        def combine_response(criticality, complexity):
+            return {
+                "criticality": criticality,
+                "complexity": complexity,
+            }
+
+        chain = (
+            prompt_template
+            | model
+            | StrOutputParser()
+            | RunnableParallel(branches={"criticality": criticality_chain, "complexity": complexity_chain})
+            | RunnableLambda(lambda x: combine_response(x["branches"]["criticality"], x["branches"]["complexity"]))
+        )
+
+        for service_type_name, group in service_type_groups.items():
+            
+            topic_summary = ""
+            for topic in group['topics']:
+                topic_summary += f"The topic name is {topic.name}. "
+                topic_summary += f"The topic description is {topic.description}. "
+            
+            # Invoke the chain for this service type
+            result = chain.invoke({
+                "service_type_name": service_type_name, 
+                "topic_summary": topic_summary
+            })
+            
+            # Calculate total time based on complexity and criticality
+            total_time = 10
+            if "high" in result["complexity"].lower() and "high" in result["criticality"].lower():
+                total_time = 12
+            elif "high" in result["complexity"].lower() and "low" in result["criticality"].lower():
+                total_time = 10
+            elif "low" in result["complexity"].lower() and "high" in result["criticality"].lower():
+                total_time = 8
+            elif "low" in result["complexity"].lower() and "low" in result["criticality"].lower():
+                total_time = 6
+            
+            # Get service type percentages
+            service_type = group['service_type']
+            kt_percent = service_type.kt_session
+            fwd_percent = service_type.fwd_shadow
+            rev_percent = service_type.rev_shadow
+            cutover_percent = service_type.cutover
+
+            # Calculate days
+            kt_weeks = ((int(kt_percent)/100)*total_time)
+            kt_days = math.floor(kt_weeks*7)
+            fwd_weeks = ((int(fwd_percent)/100)*total_time)
+            fwd_days = math.floor(fwd_weeks*7)
+            rev_weeks = ((int(rev_percent)/100)*total_time)
+            rev_days = math.floor(rev_weeks*7)
+            cutover_weeks = ((int(cutover_percent)/100)*total_time)
+            cutover_days = math.floor(cutover_weeks*7)
+
+            # Store results for this service type
+            results[service_type_name] = {
+                "kt_session": kt_days,
+                "fwd_shadow": fwd_days,
+                "rev_shadow": rev_days,
+                "cutover": cutover_days
+            }
+
+        return results
+
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
