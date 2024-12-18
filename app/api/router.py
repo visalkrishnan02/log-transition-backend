@@ -218,6 +218,9 @@ class TopicRiskResponse(TopicRiskCreate):
     class Config:
         from_attributes = True
 
+class TimelineRequest(BaseModel):
+    subcatalog_ids: List[int]
+
 # Database dependency
 def get_db():
     db = SessionLocal()
@@ -863,40 +866,58 @@ def delete_topic_risk(risk_id: int, db: Session = Depends(get_db)):
 # Timeline Generation
 #####################
 
-@router.get("/timeline/{subcatalog_id}", response_model=dict)
-def get_subcatalog_topics_by_event_type(subcatalog_id: int, db: Session = Depends(get_db)):
-    
-    subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
-    if not subcatalog:
-        raise HTTPException(status_code=404, detail="Subcatalog not found")
-    
-    service_type = db.query(ServiceType).filter(ServiceType.id == subcatalog.service_type_id).first()
-    if not service_type:
-        raise HTTPException(status_code=404, detail="Service Type not found")
-    
-    topics = db.query(Topic).filter(Topic.subcatalog_id == subcatalog_id).all()
+@router.post("/timeline", response_model=dict) #request body: { "subcatalog_ids" : [1,2,3]}
+def get_subcatalogs_timeline(request: TimelineRequest, db: Session = Depends(get_db)):
 
-    topic_summary = ""
-    for topic in topics:
-        topic_summary += f"The topic name is {topic.name}. "
-        topic_summary += f"The topic description is {topic.description}. "
+    subcatalog_ids = request.subcatalog_ids
+
+    if not subcatalog_ids:
+        raise HTTPException(status_code=400, detail="No subcatalog IDs provided")
+
+    service_type_groups = {}
     
-    sub_catalog_name = subcatalog.sub_catalog_name
+    for subcatalog_id in subcatalog_ids:
 
-    kt_percent = getattr(service_type, "kt_session")
-    fwd_percent = getattr(service_type, "fwd_shadow")
-    rev_percent = getattr(service_type, "rev_shadow")
-    cutover_percent = getattr(service_type, "cutover")
+        subcatalog = db.query(SubCatalog).filter(SubCatalog.id == subcatalog_id).first()
+        if not subcatalog:
+            raise HTTPException(status_code=404, detail=f"Subcatalog with ID {subcatalog_id} not found")
+        
+        service_type = db.query(ServiceType).filter(ServiceType.id == subcatalog.service_type_id).first()
+        if not service_type:
+            raise HTTPException(status_code=404, detail=f"Service Type for subcatalog {subcatalog_id} not found")
+        
+        if service_type.service_type_name not in service_type_groups:
+            service_type_groups[service_type.service_type_name] = {
+                'service_type': service_type,
+                'subcatalogs': [],
+                'topics': []
+            }
+        
+        service_type_groups[service_type.service_type_name]['subcatalogs'].append(subcatalog)
 
+    for service_type_name, group in service_type_groups.items():
+
+        topics = []
+        for subcatalog in group['subcatalogs']:
+            subcatalog_topics = db.query(Topic).filter(Topic.subcatalog_id == subcatalog.id).all()
+            topics.extend(subcatalog_topics)
+        
+        group['topics'] = topics
+
+    # Prepare results
+    results = {}
+    
     try:
         model = AzureChatOpenAI(model="gpt-4o", api_version='2024-02-15-preview')
+        
+        # Prompt template for analysis
         prompt_template = ChatPromptTemplate.from_messages(
             [
                 ("system", "You are an expert analyst specializing in evaluating services and their associated tasks."),
                 (
                     "human", 
                     (
-                        "Given is the service name, {sub_catalog_name} and task summary of this service, {topic_summary}.\n"
+                        "Given is the service name, {service_type_name} and task summary of this service, {topic_summary}.\n"
                         "Given the following details about the service and its tasks, analyze and provide the following:\n"
                         "1. The criticality of the service and its tasks. Explain why they are critical or not.\n"
                         "2. The complexity of the tasks, considering the processes, dependencies, and technical requirements.\n"
@@ -938,52 +959,70 @@ def get_subcatalog_topics_by_event_type(subcatalog_id: int, db: Session = Depend
             RunnableLambda(lambda x: analyze_complexity(x)) | model | StrOutputParser()
         )
 
-        def combine_reponse(criticality, complexity):
-            result = {
-            "criticality": criticality,
-            "complexity": complexity,
+        def combine_response(criticality, complexity):
+            return {
+                "criticality": criticality,
+                "complexity": complexity,
             }
-            return result
-
 
         chain = (
             prompt_template
             | model
             | StrOutputParser()
             | RunnableParallel(branches={"criticality": criticality_chain, "complexity": complexity_chain})
-            | RunnableLambda(lambda x: combine_reponse(x["branches"]["criticality"], x["branches"]["complexity"]))
+            | RunnableLambda(lambda x: combine_response(x["branches"]["criticality"], x["branches"]["complexity"]))
         )
 
-        result = chain.invoke({"sub_catalog_name": sub_catalog_name, "topic_summary": topic_summary})
-        
-        total_time = 10
-
-        if( ("high" in result["complexity"].lower()) and ("high" in result["criticality"].lower()) ):
-            total_time = 12
-        elif( ("high" in result["complexity"].lower()) and ("low" in result["criticality"].lower()) ):
+        for service_type_name, group in service_type_groups.items():
+            
+            topic_summary = ""
+            for topic in group['topics']:
+                topic_summary += f"The topic name is {topic.name}. "
+                topic_summary += f"The topic description is {topic.description}. "
+            
+            # Invoke the chain for this service type
+            result = chain.invoke({
+                "service_type_name": service_type_name, 
+                "topic_summary": topic_summary
+            })
+            
+            # Calculate total time based on complexity and criticality
             total_time = 10
-        elif( ("low" in result["complexity"].lower()) and ("high" in result["criticality"].lower()) ):
-            total_time = 8
-        elif( ("low" in result["complexity"].lower()) and ("low" in result["criticality"].lower()) ):
-            total_time = 6
-        else:
-            total_time = 10    
+            if "high" in result["complexity"].lower() and "high" in result["criticality"].lower():
+                total_time = 12
+            elif "high" in result["complexity"].lower() and "low" in result["criticality"].lower():
+                total_time = 10
+            elif "low" in result["complexity"].lower() and "high" in result["criticality"].lower():
+                total_time = 8
+            elif "low" in result["complexity"].lower() and "low" in result["criticality"].lower():
+                total_time = 6
+            
+            # Get service type percentages
+            service_type = group['service_type']
+            kt_percent = service_type.kt_session
+            fwd_percent = service_type.fwd_shadow
+            rev_percent = service_type.rev_shadow
+            cutover_percent = service_type.cutover
 
-        kt_weeks = ((int(kt_percent)/100)*total_time)
-        kt_days = math.floor(kt_weeks*7)
-        fwd_weeks = ((int(fwd_percent)/100)*total_time)
-        fwd_days = math.floor(fwd_weeks*7)
-        rev_weeks = ((int(rev_percent)/100)*total_time)
-        rev_days = math.floor(rev_weeks*7)
-        cutover_weeks = ((int(cutover_percent)/100)*total_time)
-        cutover_days = math.floor(cutover_weeks*7)
+            # Calculate days
+            kt_weeks = ((int(kt_percent)/100)*total_time)
+            kt_days = math.floor(kt_weeks*7)
+            fwd_weeks = ((int(fwd_percent)/100)*total_time)
+            fwd_days = math.floor(fwd_weeks*7)
+            rev_weeks = ((int(rev_percent)/100)*total_time)
+            rev_days = math.floor(rev_weeks*7)
+            cutover_weeks = ((int(cutover_percent)/100)*total_time)
+            cutover_days = math.floor(cutover_weeks*7)
 
-        return {
-            "kt_session":kt_days,
-            "fwd_shadow":fwd_days,
-            "rev_shadow":rev_days,
-            "cutover":cutover_days
-        }
+            # Store results for this service type
+            results[service_type_name] = {
+                "kt_session": kt_days,
+                "fwd_shadow": fwd_days,
+                "rev_shadow": rev_days,
+                "cutover": cutover_days
+            }
+
+        return results
 
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
